@@ -45,13 +45,50 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
         )
 
+# Commande pour la vérification d'abonnement
+async def check_subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Vérifie si l'utilisateur est abonné au canal @alvecapital1."""
+    user_id = update.effective_user.id
+    
+    try:
+        # Vérifier si l'utilisateur est membre du canal
+        chat_member = await context.bot.get_chat_member(chat_id="@alvecapital1", user_id=user_id)
+        
+        # Statuts indiquant que l'utilisateur est membre
+        member_statuses = ['creator', 'administrator', 'member']
+        
+        if chat_member.status in member_statuses:
+            # L'utilisateur est abonné
+            await update.message.reply_text(
+                "✅ Félicitations! Vous êtes bien abonné au canal @alvecapital1.\n\n"
+                "Vous pouvez maintenant utiliser toutes les fonctionnalités premium de FIFA 4x4 Predictor."
+            )
+        else:
+            # L'utilisateur n'est pas abonné
+            keyboard = [
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "❌ Vous n'êtes pas abonné à notre canal @alvecapital1.\n\n"
+                "L'abonnement est requis pour accéder aux fonctionnalités premium de FIFA 4x4 Predictor.",
+                reply_markup=reply_markup
+            )
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification d'abonnement: {e}")
+        await update.message.reply_text(
+            "⚠️ Une erreur est survenue lors de la vérification de votre abonnement. "
+            "Veuillez réessayer plus tard ou contacter le support."
+        )
+
 # Ajouter cette fonction pour gérer la commande /webapp
 async def webapp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Ouvre la WebApp pour les prédictions FIFA 4x4"""
     webapp_button = InlineKeyboardButton(
-    text="📊 Ouvrir l'application de prédiction",
-    web_app=WebAppInfo(url="https://verol333.github.io/fifa-predictor-bot/")
-)
+        text="📊 Ouvrir l'application de prédiction",
+        web_app=WebAppInfo(url="https://votre-webapp-url.com")  # Remplacez par l'URL de votre WebApp déployée
+    )
     
     keyboard = InlineKeyboardMarkup([[webapp_button]])
     
@@ -333,30 +370,36 @@ Pour un fonctionnement continu, hébergez sur un serveur comme:
 # Fonction principale
 def main() -> None:
     """Démarre le bot."""
-    # Créer l'application
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    try:
+        # Créer l'application
+        application = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Ajouter les gestionnaires de commandes
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("predict", predict_command))
-    application.add_handler(CommandHandler("odds", odds_command))
-    application.add_handler(CommandHandler("teams", teams_command))
-    application.add_handler(CommandHandler("setup", setup_command))
-    application.add_handler(CommandHandler("webapp", webapp_command))
-    
-    # Ajouter le gestionnaire pour les clics sur les boutons
-    application.add_handler(CallbackQueryHandler(button_click))
-    
-    # Ajouter le gestionnaire pour les messages normaux
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    # Ajouter le gestionnaire d'erreurs
-    application.add_error_handler(error_handler)
+        # Ajouter les gestionnaires de commandes
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("predict", predict_command))
+        application.add_handler(CommandHandler("odds", odds_command))
+        application.add_handler(CommandHandler("teams", teams_command))
+        application.add_handler(CommandHandler("setup", setup_command))
+        application.add_handler(CommandHandler("webapp", webapp_command))
+        application.add_handler(CommandHandler("check", check_subscription_command))
+        
+        # Ajouter le gestionnaire pour les clics sur les boutons
+        application.add_handler(CallbackQueryHandler(button_click))
+        
+        # Ajouter le gestionnaire pour les messages normaux
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        
+        # Ajouter le gestionnaire d'erreurs
+        application.add_error_handler(error_handler)
 
-    # Démarrer le bot
-    logger.info("Bot démarré")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+        # Démarrer le bot
+        logger.info("Bot démarré avec succès")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.critical(f"ERREUR CRITIQUE lors du démarrage du bot: {e}")
+        import traceback
+        logger.critical(traceback.format_exc())
 
 if __name__ == '__main__':
     main()

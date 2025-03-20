@@ -12,6 +12,7 @@
             --tg-gradient: linear-gradient(135deg, #0088cc, #33a9dc);
             --premium-gold: #ffd700;
             --premium-gradient: linear-gradient(135deg, #b8860b, #ffd700);
+            --predictor-color: #FF6B6B;
         }
         
         * {
@@ -25,12 +26,14 @@
             background-color: #f0f2f5;
             color: #333;
             line-height: 1.5;
+            text-align: center;
         }
         
         .page {
             display: none;
             padding: 20px;
-            max-width: 600px;
+            max-width: 100%;
+            width: 100%;
             margin: 0 auto;
             min-height: 100vh;
         }
@@ -41,21 +44,21 @@
         
         .logo-container {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             padding-top: 20px;
         }
         
         .logo {
-            width: 90px;
-            height: 90px;
-            margin: 0 auto 20px;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
             display: flex;
             align-items: center;
             justify-content: center;
             background: var(--tg-gradient);
             border-radius: 50%;
             color: white;
-            font-size: 40px;
+            font-size: 36px;
             box-shadow: 0 4px 20px rgba(0, 136, 204, 0.3);
             position: relative;
             overflow: hidden;
@@ -74,63 +77,53 @@
         
         .main-title {
             text-align: center;
-            margin-bottom: 20px;
-            font-size: 32px;
+            margin-bottom: 15px;
+            width: 100%;
+            font-size: 30px;
             font-weight: 800;
             color: #333;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .main-title span {
+            color: var(--predictor-color);
+            text-shadow: 0 1px 2px rgba(255, 107, 107, 0.2);
         }
         
         .subtitle {
             text-align: center;
-            margin-bottom: 25px;
-            font-size: 24px;
+            margin-bottom: 20px;
+            font-size: 22px;
             font-weight: 700;
             color: #444;
-            position: relative;
-            display: inline-block;
-            padding-bottom: 10px;
-        }
-        
-        .subtitle:after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60px;
-            height: 3px;
-            background: var(--tg-gradient);
-            border-radius: 3px;
+            width: 100%;
         }
         
         .description-box {
             background-color: white;
             border-radius: 16px;
-            padding: 25px;
-            margin-bottom: 30px;
+            padding: 18px;
+            margin-bottom: 25px;
             text-align: center;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(0, 0, 0, 0.04);
-            position: relative;
         }
         
         .description-text {
             font-size: 16px;
-            line-height: 1.6;
+            line-height: 1.5;
             color: #555;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         .channel-name {
             display: inline-block;
-            padding: 10px 25px;
+            padding: 8px 20px;
             background: var(--premium-gradient);
             color: #333;
             font-weight: 800;
             font-size: 22px;
             border-radius: 50px;
-            margin: 10px 0 20px;
+            margin: 5px 0 15px;
             text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
             box-shadow: 0 4px 15px rgba(184, 134, 11, 0.3);
         }
@@ -140,14 +133,14 @@
         }
         
         .benefits {
-            margin: 25px 0;
+            margin: 15px 0;
         }
         
         .benefit {
             display: flex;
             align-items: center;
-            margin-bottom: 15px;
-            padding: 10px 0;
+            margin-bottom: 12px;
+            padding: 8px 0;
             border-bottom: 1px solid #f0f0f0;
         }
         
@@ -158,21 +151,22 @@
         
         .benefit-icon {
             flex-shrink: 0;
-            width: 32px;
-            height: 32px;
+            width: 28px;
+            height: 28px;
             background-color: #e3f2fd;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-right: 15px;
+            margin-right: 12px;
             color: var(--tg-color);
         }
         
         .benefit-text {
-            font-size: 16px;
+            font-size: 15px;
             color: #444;
             font-weight: 500;
+            text-align: left;
         }
         
         .btn {
@@ -186,7 +180,7 @@
             font-weight: 600;
             border-radius: 12px;
             cursor: pointer;
-            margin: 20px 0;
+            margin: 15px 0;
             text-align: center;
             text-decoration: none;
             box-shadow: 0 4px 15px rgba(0, 136, 204, 0.2);
@@ -215,7 +209,7 @@
         
         .footer-text {
             text-align: center;
-            margin-top: 25px;
+            margin-top: 20px;
             font-size: 14px;
             color: #777;
             display: flex;
@@ -232,7 +226,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin: 30px 0;
+            margin: 25px 0;
             display: none;
         }
         
@@ -249,12 +243,6 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(0, 136, 204, 0.4); }
-            70% { box-shadow: 0 0 0 15px rgba(0, 136, 204, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(0, 136, 204, 0); }
-        }
     </style>
 </head>
 <body>
@@ -266,7 +254,7 @@
             </div>
         </div>
         
-        <h1 class="main-title">FIFA 4x4 Predictor</h1>
+        <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
         <h2 class="subtitle">Accès Premium Requis</h2>
         
         <div class="description-box">
@@ -340,8 +328,7 @@
                         // Masquer la page de vérification
                         document.getElementById('subscription-check').classList.remove('active');
                         
-                        // Rediriger vers la page principale (à implémenter)
-                        // Pour l'instant, juste un message
+                        // Rediriger vers la page principale
                         document.getElementById('prediction-page').classList.add('active');
                         document.getElementById('prediction-page').innerHTML = `
                             <div class="logo-container">
@@ -349,7 +336,7 @@
                                     <i class="fas fa-futbol"></i>
                                 </div>
                             </div>
-                            <h1 class="main-title">FIFA 4x4 Predictor</h1>
+                            <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
                             <div class="description-box">
                                 <p class="description-text">Félicitations! Votre abonnement à AL VE CAPITAL a été vérifié.</p>
                                 <p class="description-text">Vous pouvez maintenant accéder à notre outil de prédiction premium.</p>
@@ -371,7 +358,7 @@
                         <i class="fas fa-futbol"></i>
                     </div>
                 </div>
-                <h1 class="main-title">FIFA 4x4 Predictor</h1>
+                <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
                 <div class="description-box">
                     <p class="description-text">Application en cours de développement...</p>
                     <p class="description-text">Notre équipe travaille pour vous offrir la meilleure expérience de prédiction possible.</p>

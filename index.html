@@ -500,6 +500,57 @@
         .recap-value {
             color: #333;
         }
+
+        /* Nouveaux styles pour la confirmation d'abonnement */
+        .subscription-confirmed {
+            display: none;
+            background-color: rgba(76, 175, 80, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 20px 0;
+            animation: fadeIn 0.5s ease-out;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .subscription-confirmed.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirmation-icon {
+            background-color: var(--accent-green);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 20px;
+            box-shadow: 0 4px 10px rgba(76, 175, 80, 0.3);
+        }
+
+        .confirmation-text {
+            color: var(--accent-green);
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #4CAF50, #2E7D32);
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        .btn-success:hover {
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -541,14 +592,22 @@
                     <span class="benefit-text">Recommandations en temps réel</span>
                 </div>
             </div>
+
+            <!-- Élément pour afficher la confirmation d'abonnement -->
+            <div id="subscription-confirmed" class="subscription-confirmed">
+                <div class="confirmation-icon">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="confirmation-text">Abonnement vérifié avec succès!</div>
+            </div>
         </div>
         
-        <a href="https://t.me/alvecapital1" class="btn btn-outline">
+        <a href="https://t.me/alvecapital1" class="btn btn-outline" target="_blank">
             <i class="fab fa-telegram"></i> Rejoindre le canal
         </a>
         
         <button id="verify-subscription" class="btn">
-            Vérifier mon abonnement
+            <i class="fas fa-user-check"></i> Vérifier mon abonnement
         </button>
         
         <div id="loading-verification" class="loading">
@@ -556,13 +615,17 @@
             <p>Vérification en cours...</p>
         </div>
         
+        <button id="continue-to-app" class="btn btn-success" style="display: none;">
+            <i class="fas fa-arrow-right"></i> Continuer vers l'application
+        </button>
+        
         <div class="footer-text">
             <i class="fas fa-lock"></i> Cet outil est exclusivement réservé aux membres
         </div>
     </div>
 
     <!-- Page 2: Description et introduction -->
-    <div id="intro-page" class="page">
+    <div id="game-intro" class="page">
         <div class="logo-container">
             <div class="logo">
                 <i class="fas fa-futbol"></i>
@@ -583,24 +646,26 @@
         </button>
     </div>
 
-    <!-- Page 3: Sélection des équipes -->
-    <div id="teams-page" class="page">
+    <!-- Page 3: Sélection des équipes et prédiction -->
+    <div id="prediction-page" class="page">
         <div class="logo-container">
             <div class="logo">
-                <i class="fas fa-users"></i>
+                <i class="fas fa-chart-line"></i>
             </div>
         </div>
         
-        <h1 class="main-title">Sélectionner les <span>équipes</span></h1>
+        <h1 class="main-title">Prédiction <span>FIFA 4x4</span></h1>
         
         <div class="card">
-            <p class="text">Veuillez entrer les noms des deux équipes qui s'affrontent.</p>
+            <p class="text">Sélectionnez les deux équipes et entrez les cotes (optionnel) pour obtenir une prédiction:</p>
             
             <div class="team-inputs">
                 <div class="team-input">
                     <div class="form-group">
                         <label for="team1">Équipe 1</label>
-                        <input type="text" id="team1" class="form-control" placeholder="ex: Manchester United">
+                        <select id="team1" class="form-control">
+                            <option value="" disabled selected>Sélectionner une équipe</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -609,399 +674,47 @@
                 <div class="team-input">
                     <div class="form-group">
                         <label for="team2">Équipe 2</label>
-                        <input type="text" id="team2" class="form-control" placeholder="ex: Chelsea">
+                        <select id="team2" class="form-control">
+                            <option value="" disabled selected>Sélectionner une équipe</option>
+                        </select>
                     </div>
                 </div>
             </div>
             
-            <p class="helper-text">* Veuillez entrer les noms exacts des équipes pour obtenir les meilleures prédictions.</p>
+            <div class="form-group">
+                <label>Cotes (optionnel)</label>
+                <div class="team-inputs">
+                    <div class="team-input">
+                        <input type="number" id="odds1" class="form-control" placeholder="Cote équipe 1" step="0.01" min="1.01">
+                    </div>
+                    <div class="vs-badge"></div>
+                    <div class="team-input">
+                        <input type="number" id="odds2" class="form-control" placeholder="Cote équipe 2" step="0.01" min="1.01">
+                    </div>
+                </div>
+            </div>
         </div>
         
-        <button id="next-to-odds" class="btn">
-            Suivant
+        <button id="predict-button" class="btn">
+            <i class="fas fa-magic"></i> Obtenir la prédiction
         </button>
-    </div>
-
-    <!-- Page 4: Entrée des cotes -->
-    <div id="odds-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-percentage"></i>
-            </div>
-        </div>
         
-        <h1 class="main-title">Entrer les <span>cotes</span></h1>
-        
-        <div class="card">
-            <p class="text">Veuillez entrer les cotes actuelles des bookmakers pour ce match.</p>
-            
-            <div class="team-inputs">
-                <div class="team-input">
-                    <div class="form-group">
-                        <label for="odds1" id="team1-label">Cote Équipe 1</label>
-                        <input type="number" id="odds1" class="form-control" step="0.01" min="1.01" placeholder="ex: 1.85">
-                    </div>
-                </div>
-                
-                <div class="vs-badge"></div>
-                
-                <div class="team-input">
-                    <div class="form-group">
-                        <label for="odds2" id="team2-label">Cote Équipe 2</label>
-                        <input type="number" id="odds2" class="form-control" step="0.01" min="1.01" placeholder="ex: 2.25">
-                    </div>
-                </div>
-            </div>
-            
-            <p class="helper-text">* Utilisez les cotes réelles fournies par Melbet, Mega Paris ou 1xBet pour une meilleure précision.</p>
-        </div>
-        
-        <button id="next-to-recap" class="btn">
-            Suivant
+        <button id="go-back" class="btn btn-outline">
+            <i class="fas fa-arrow-left"></i> Retour
         </button>
-    </div>
-
-    <!-- Page 5: Récapitulatif -->
-    <div id="recap-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-clipboard-check"></i>
-            </div>
+        
+        <div id="loading-prediction" class="loading">
+            <div class="spinner"></div>
+            <p>Analyse des données en cours...</p>
         </div>
         
-        <h1 class="main-title">Vérifier les <span>informations</span></h1>
-        
-        <div class="card">
-            <p class="text">Veuillez vérifier que les informations suivantes sont correctes avant de continuer.</p>
-            
-            <div class="recap-item">
-                <div class="recap-label">Équipe 1:</div>
-                <div class="recap-value" id="recap-team1">-</div>
-            </div>
-            
-            <div class="recap-item">
-                <div class="recap-label">Équipe 2:</div>
-                <div class="recap-value" id="recap-team2">-</div>
-            </div>
-            
-            <div class="recap-item">
-                <div class="recap-label">Cote Équipe 1:</div>
-                <div class="recap-value" id="recap-odds1">-</div>
-            </div>
-            
-            <div class="recap-item">
-                <div class="recap-label">Cote Équipe 2:</div>
-                <div class="recap-value" id="recap-odds2">-</div>
-            </div>
+        <div id="prediction-results" class="card" style="display: none;">
+            <!-- Les résultats de prédiction seront insérés ici par JavaScript -->
         </div>
-        
-        <button id="get-prediction" class="btn">
-            Obtenir la prédiction
-        </button>
-    </div>
-
-    <!-- Page 6: Analyse en cours -->
-    <div id="analysis-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-cogs"></i>
-            </div>
-        </div>
-        
-        <h1 class="main-title">Analyse en <span>cours</span></h1>
-        
-        <div class="card">
-            <p class="text">Notre intelligence artificielle analyse les données et génère votre prédiction personnalisée.</p>
-            
-            <div class="analysis-container" id="analysis-animation">
-                <div class="cube">
-                    <div class="cube-face"><i class="fas fa-chart-line"></i></div>
-                    <div class="cube-face"><i class="fas fa-database"></i></div>
-                    <div class="cube-face"><i class="fas fa-brain"></i></div>
-                    <div class="cube-face"><i class="fas fa-calculator"></i></div>
-                    <div class="cube-face"><i class="fas fa-futbol"></i></div>
-                    <div class="cube-face"><i class="fas fa-trophy"></i></div>
-                </div>
-                <div class="analysis-text">Calcul en cours...</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Page 7: Résultats -->
-    <div id="results-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-chart-bar"></i>
-            </div>
-        </div>
-        
-        <h1 class="main-title">Vos <span>prédictions</span></h1>
-        
-        <div class="card">
-            <div class="results-section">
-                <div class="section-title">
-                    <i class="fas fa-hourglass-half"></i> Scores 1ère mi-temps
-                </div>
-                
-                <div class="score-grid">
-                    <div class="score-item">
-                        <div class="score-value" id="half-score1">0:0</div>
-                        <div class="score-confidence">Confiance: 75%</div>
-                    </div>
-                    <div class="score-item">
-                        <div class="score-value" id="half-score2">1:0</div>
-                        <div class="score-confidence">Confiance: 65%</div>
-                    </div>
-                </div>
-                
-                <div class="winner-box">
-                    <p>Gagnant 1ère mi-temps: <span class="winner-team" id="half-winner">Manchester United</span></p>
-                    <p>Confiance: <span id="half-winner-confidence">70%</span></p>
-                </div>
-            </div>
-            
-            <div class="results-section">
-                <div class="section-title">
-                    <i class="fas fa-futbol"></i> Scores temps réglementaire
-                </div>
-                
-                <div class="score-grid">
-                    <div class="score-item">
-                        <div class="score-value" id="full-score1">2:1</div>
-                        <div class="score-confidence">Confiance: 78%</div>
-                    </div>
-                    <div class="score-item">
-                        <div class="score-value" id="full-score2">2:0</div>
-                        <div class="score-confidence">Confiance: 68%</div>
-                    </div>
-                </div>
-                
-                <div class="winner-box">
-                    <p>Gagnant temps réglementaire: <span class="winner-team" id="full-winner">Manchester United</span></p>
-                    <p>Confiance: <span id="full-winner-confidence">75%</span></p>
-                </div>
-            </div>
-            
-            <div class="results-section">
-                <div class="section-title">
-                    <i class="fas fa-bullseye"></i> Statistiques (99% de confiance)
-                </div>
-                
-                <div class="stats-container">
-                    <div class="stat-box">
-                        <div class="stat-value" id="over-half">1.5</div>
-                        <div class="stat-label">Buts 1ère mi-temps</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value" id="over-full">2.5</div>
-                        <div class="stat-label">Buts temps réglementaire</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <button id="new-prediction" class="btn">
-            Nouvelle prédiction
-        </button>
     </div>
 
     <script>
-        let userTeam1 = '';
-        let userTeam2 = '';
-        let userOdds1 = '';
-        let userOdds2 = '';
-        
-        // Initialisation
-        document.addEventListener("DOMContentLoaded", function() {
-            // Initialiser l'API Telegram WebApp
-            window.Telegram.WebApp.ready();
-            
-            // Vérification d'abonnement
-            document.getElementById('verify-subscription').addEventListener('click', function() {
-                document.getElementById('loading-verification').style.display = 'flex';
-                this.style.display = 'none';
-                
-                // Simulation de vérification (3 secondes)
-                setTimeout(function() {
-                    showPage('intro-page');
-                }, 3000);
-            });
-            
-            // Navigation: Intro -> Teams
-            document.getElementById('start-prediction').addEventListener('click', function() {
-                showPage('teams-page');
-            });
-            
-            // Navigation: Teams -> Odds
-            document.getElementById('next-to-odds').addEventListener('click', function() {
-                userTeam1 = document.getElementById('team1').value.trim();
-                userTeam2 = document.getElementById('team2').value.trim();
-                
-                if (!userTeam1 || !userTeam2) {
-                    alert('Veuillez entrer les noms des deux équipes.');
-                    return;
-                }
-                
-                if (userTeam1 === userTeam2) {
-                    alert('Veuillez entrer deux équipes différentes.');
-                    return;
-                }
-                
-                // Mettre à jour les labels avec les noms des équipes
-                document.getElementById('team1-label').textContent = `Cote ${userTeam1}`;
-                document.getElementById('team2-label').textContent = `Cote ${userTeam2}`;
-                
-                showPage('odds-page');
-            });
-            
-            // Navigation: Odds -> Recap
-            document.getElementById('next-to-recap').addEventListener('click', function() {
-                userOdds1 = document.getElementById('odds1').value.trim();
-                userOdds2 = document.getElementById('odds2').value.trim();
-                
-                // Validation des cotes
-                if (userOdds1 && parseFloat(userOdds1) < 1.01) {
-                    alert('La cote doit être supérieure à 1.01');
-                    return;
-                }
-                
-                if (userOdds2 && parseFloat(userOdds2) < 1.01) {
-                    alert('La cote doit être supérieure à 1.01');
-                    return;
-                }
-                
-                // Mettre à jour le récapitulatif
-                document.getElementById('recap-team1').textContent = userTeam1;
-                document.getElementById('recap-team2').textContent = userTeam2;
-                document.getElementById('recap-odds1').textContent = userOdds1 ? userOdds1 : 'Non spécifié';
-                document.getElementById('recap-odds2').textContent = userOdds2 ? userOdds2 : 'Non spécifié';
-                
-                showPage('recap-page');
-            });
-            
-            // Navigation: Recap -> Analysis
-            document.getElementById('get-prediction').addEventListener('click', function() {
-                showPage('analysis-page');
-                
-                // Afficher l'animation d'analyse
-                document.getElementById('analysis-animation').style.display = 'block';
-                
-                // Simulation d'analyse (5 secondes)
-                setTimeout(function() {
-                    // Générer des prédictions aléatoires
-                    const predictions = generateRandomPredictions(userTeam1, userTeam2);
-                    
-                    // Mettre à jour l'interface avec les prédictions
-                    updatePredictionUI(predictions);
-                    
-                    // Afficher les résultats
-                    showPage('results-page');
-                }, 5000);
-            });
-            
-            // Nouvelle prédiction
-            document.getElementById('new-prediction').addEventListener('click', function() {
-                // Réinitialiser les formulaires
-                document.getElementById('team1').value = '';
-                document.getElementById('team2').value = '';
-                document.getElementById('odds1').value = '';
-                document.getElementById('odds2').value = '';
-                
-                // Retourner à la page d'introduction
-                showPage('intro-page');
-            });
-        });
-        
-        // Fonction pour afficher une page spécifique
-        function showPage(pageId) {
-            // Masquer toutes les pages
-            document.querySelectorAll('.page').forEach(page => {
-                page.classList.remove('active');
-            });
-            
-            // Afficher la page demandée
-            const targetPage = document.getElementById(pageId);
-            if (targetPage) {
-                targetPage.classList.add('active');
-            }
-        }
-        
-        // Fonction pour générer des prédictions aléatoires (dans une vraie application, ces données viendraient de votre API)
-        function generateRandomPredictions(team1, team2) {
-            // Déterminer le gagnant (60% chance team1, 30% chance team2, 10% match nul)
-            const winnerRandom = Math.random();
-            let winnerHalf = '';
-            let winnerFull = '';
-            
-            if (winnerRandom < 0.6) {
-                winnerHalf = team1;
-                winnerFull = team1;
-            } else if (winnerRandom < 0.9) {
-                winnerHalf = team2;
-                winnerFull = team2;
-            } else {
-                winnerHalf = 'Match nul';
-                winnerFull = 'Match nul';
-            }
-            
-            // Générer des scores plausibles
-            const halfScore1 = Math.floor(Math.random() * 2) + ":" + Math.floor(Math.random() * 2);
-            const halfScore2 = Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 2);
-            
-            const fullScore1 = Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 2);
-            const fullScore2 = Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3);
-            
-            // Générer des niveaux de confiance
-            const halfConfidence = Math.floor(Math.random() * 20) + 60;
-            const fullConfidence = Math.floor(Math.random() * 20) + 60;
-            
-            // Calculer les seuils de buts
-            const halfGoals = (Math.random() * 1.5 + 0.5).toFixed(1);
-            const fullGoals = (Math.random() * 2 + 1.5).toFixed(1);
-            
-            return {
-                halfTimeScores: [
-                    { score: halfScore1, confidence: Math.floor(Math.random() * 15) + 65 },
-                    { score: halfScore2, confidence: Math.floor(Math.random() * 15) + 55 }
-                ],
-                fullTimeScores: [
-                    { score: fullScore1, confidence: Math.floor(Math.random() * 15) + 65 },
-                    { score: fullScore2, confidence: Math.floor(Math.random() * 15) + 55 }
-                ],
-                halfTimeWinner: {
-                    team: winnerHalf,
-                    confidence: halfConfidence
-                },
-                fullTimeWinner: {
-                    team: winnerFull,
-                    confidence: fullConfidence
-                },
-                overUnder: {
-                    halfTime: halfGoals,
-                    fullTime: fullGoals
-                }
-            };
-        }
-        
-        // Mettre à jour l'interface avec les prédictions
-        function updatePredictionUI(predictions) {
-            // Scores mi-temps
-            document.getElementById('half-score1').textContent = predictions.halfTimeScores[0].score;
-            document.getElementById('half-score2').textContent = predictions.halfTimeScores[1].score;
-            
-            // Gagnant mi-temps
-            document.getElementById('half-winner').textContent = predictions.halfTimeWinner.team;
-            document.getElementById('half-winner-confidence').textContent = predictions.halfTimeWinner.confidence + '%';
-            
-            // Scores temps réglementaire
-            document.getElementById('full-score1').textContent = predictions.fullTimeScores[0].score;
-            document.getElementById('full-score2').textContent = predictions.fullTimeScores[1].score;
-            
-            // Gagnant temps réglementaire
-            document.getElementById('full-winner').textContent = predictions.fullTimeWinner.team;
-            document.getElementById('full-winner-confidence').textContent = predictions.fullTimeWinner.confidence + '%';
-            
-            // Statistiques
-            document.getElementById('over-half').textContent = predictions.overUnder.halfTime;
-            document.getElementById('over-full').textContent = predictions.overUnder.fullTime;
-        }
+        // Le JavaScript sera mis à jour dans un autre fichier (app.js)
+    </script>
+</body>
+</html>

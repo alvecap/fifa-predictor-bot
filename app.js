@@ -228,4 +228,135 @@ function generateMockPrediction(team1, team2, odds1, odds2) {
             { score: Math.floor(Math.random() * 5) + ":" + Math.floor(Math.random() * 5), confidence: Math.floor(Math.random() * 20) + 50 },
             { score: Math.floor(Math.random() * 4) + ":" + Math.floor(Math.random() * 4), confidence: Math.floor(Math.random() * 20) + 40 }
         ],
-        winner
+        winner_half_time: {
+            team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Nul"),
+            probability: Math.floor(Math.random() * 30) + 60
+        },
+        winner_full_time: {
+            team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Nul"),
+            probability: Math.floor(Math.random() * 30) + 60
+        },
+        avg_goals_half_time: (Math.random() * 3 + 1).toFixed(1),
+        avg_goals_full_time: (Math.random() * 5 + 2).toFixed(1),
+        confidence_level: Math.floor(Math.random() * 30) + 60
+    };
+}
+
+// Affichage des prédictions
+function displayPrediction(prediction) {
+    const resultsEl = document.getElementById('prediction-results');
+    if (!resultsEl) return;
+    
+    // Construire le HTML des résultats
+    let html = `
+        <div class="prediction-header">
+            <div class="teams-title">${prediction.teams.team1} vs ${prediction.teams.team2}</div>
+            <div class="confidence-badge">Confiance: ${prediction.confidence_level}%</div>
+        </div>
+        
+        <div class="prediction-section">
+            <div class="section-title">
+                <i class="fas fa-clock"></i> Scores prévus (1ère mi-temps)
+            </div>
+            <ul class="score-list">
+    `;
+    
+    // Ajouter les scores mi-temps
+    prediction.half_time_scores.forEach(score => {
+        html += `
+            <li class="score-item">
+                <span class="score-value">${score.score}</span>
+                <span class="score-confidence">${score.confidence}%</span>
+            </li>
+        `;
+    });
+    
+    // Ajouter le gagnant mi-temps
+    html += `
+            </ul>
+            <div class="winner-box">
+                <p>Prédiction mi-temps: <span class="winner-team">${prediction.winner_half_time.team === "Nul" ? "Match nul" : prediction.winner_half_time.team}</span> (${prediction.winner_half_time.probability}%)</p>
+            </div>
+        </div>
+        
+        <div class="prediction-section">
+            <div class="section-title">
+                <i class="fas fa-futbol"></i> Scores prévus (temps réglementaire)
+            </div>
+            <ul class="score-list">
+    `;
+    
+    // Ajouter les scores temps réglementaire
+    prediction.full_time_scores.forEach(score => {
+        html += `
+            <li class="score-item">
+                <span class="score-value">${score.score}</span>
+                <span class="score-confidence">${score.confidence}%</span>
+            </li>
+        `;
+    });
+    
+    // Ajouter le gagnant temps réglementaire
+    html += `
+            </ul>
+            <div class="winner-box">
+                <p>Prédiction finale: <span class="winner-team">${prediction.winner_full_time.team === "Nul" ? "Match nul" : prediction.winner_full_time.team}</span> (${prediction.winner_full_time.probability}%)</p>
+            </div>
+        </div>
+        
+        <div class="prediction-section">
+            <div class="section-title">
+                <i class="fas fa-chart-bar"></i> Statistiques moyennes
+            </div>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value">${prediction.avg_goals_half_time}</div>
+                    <div class="stat-label">Buts 1ère mi-temps</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">${prediction.avg_goals_full_time}</div>
+                    <div class="stat-label">Buts temps réglementaire</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Ajouter les cotes si disponibles
+    if (prediction.odds.team1 && prediction.odds.team2) {
+        html += `
+            <div class="prediction-section">
+                <div class="section-title">
+                    <i class="fas fa-coins"></i> Cotes
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value">${prediction.odds.team1}</div>
+                        <div class="stat-label">${prediction.teams.team1}</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value">${prediction.odds.team2}</div>
+                        <div class="stat-label">${prediction.teams.team2}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Ajouter une information sur les confrontations directes
+    html += `
+        <div class="prediction-section">
+            <div class="section-title">
+                <i class="fas fa-handshake"></i> Confrontations
+            </div>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value">${prediction.direct_matches}</div>
+                    <div class="stat-label">Matchs analysés</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Insérer le HTML dans l'élément
+    resultsEl.innerHTML = html;
+}

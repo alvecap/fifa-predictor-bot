@@ -28,8 +28,10 @@ document.addEventListener("DOMContentLoaded", function() {
 const config = {
     // ID de votre canal Telegram
     channelId: '@alvecapital1',
-    // Nom d'utilisateur de votre bot Telegram
-    botUsername: '@FIFA4x4PredictorBot'
+    // URL de l'API pour la vérification d'abonnement
+    apiUrl: 'https://api.telegram.org/bot',
+    // Token du bot (à garder secret dans une vraie application)
+    botToken: '7115420946:AAGGMxo-b4qK9G3cmC2aqscV7hg2comjqxQ'
 };
 
 // Initialisation des événements
@@ -47,7 +49,7 @@ function initEvents() {
     const continueBtn = document.getElementById('continue-to-app');
     if (continueBtn) {
         continueBtn.addEventListener('click', function() {
-            showPage('game-intro');
+            showPage('dashboard-page');
         });
         console.log("Événement attaché au bouton continuer");
     }
@@ -56,26 +58,123 @@ function initEvents() {
     const startBtn = document.getElementById('start-prediction');
     if (startBtn) {
         startBtn.addEventListener('click', function() {
-            showPage('prediction-page');
+            showPage('teams-selection-page');
         });
         console.log("Événement attaché au bouton commencer");
     }
     
-    // Bouton pour retourner à l'introduction
-    const backBtn = document.getElementById('go-back');
-    if (backBtn) {
-        backBtn.addEventListener('click', function() {
-            showPage('game-intro');
+    // Bouton pour aller à la page des cotes
+    const nextToOddsBtn = document.getElementById('next-to-odds');
+    if (nextToOddsBtn) {
+        nextToOddsBtn.addEventListener('click', function() {
+            const team1 = document.getElementById('team1').value;
+            const team2 = document.getElementById('team2').value;
+            
+            if (!team1 || !team2) {
+                alert('Veuillez sélectionner les deux équipes.');
+                return;
+            }
+            
+            if (team1 === team2) {
+                alert('Veuillez sélectionner deux équipes différentes.');
+                return;
+            }
+            
+            // Mettre à jour les labels avec les noms des équipes
+            const team1Label = document.getElementById('odds1-label');
+            const team2Label = document.getElementById('odds2-label');
+            
+            if (team1Label) team1Label.textContent = `Cote ${team1}`;
+            if (team2Label) team2Label.textContent = `Cote ${team2}`;
+            
+            showPage('odds-page');
         });
-        console.log("Événement attaché au bouton retour");
     }
     
-    // Bouton de prédiction
-    const predictBtn = document.getElementById('predict-button');
-    if (predictBtn) {
-        predictBtn.addEventListener('click', getPrediction);
-        console.log("Événement attaché au bouton prédiction");
+    // Bouton pour lancer la prédiction
+    const generateBtn = document.getElementById('generate-prediction');
+    if (generateBtn) {
+        generateBtn.addEventListener('click', function() {
+            const team1 = document.getElementById('team1').value;
+            const team2 = document.getElementById('team2').value;
+            const odds1 = document.getElementById('odds1').value;
+            const odds2 = document.getElementById('odds2').value;
+            
+            if (!odds1 || !odds2) {
+                alert('Veuillez entrer les cotes pour les deux équipes.');
+                return;
+            }
+            
+            if (parseFloat(odds1) < 1.01 || parseFloat(odds2) < 1.01) {
+                alert('Les cotes doivent être supérieures à 1.01.');
+                return;
+            }
+            
+            // Lancer l'animation d'analyse
+            showPage('analysis-page');
+            
+            // Afficher les messages d'analyse
+            startAnalysisAnimation();
+            
+            // Simuler l'analyse pendant quelques secondes
+            setTimeout(() => {
+                getPrediction(team1, team2, odds1, odds2);
+            }, 4000);
+        });
     }
+    
+    // Boutons pour retourner
+    document.querySelectorAll('.back-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const targetPage = this.getAttribute('data-target');
+            if (targetPage) {
+                showPage(targetPage);
+            }
+        });
+    });
+    
+    // Bouton nouvelle prédiction
+    document.getElementById('new-prediction-btn').addEventListener('click', function() {
+        showPage('teams-selection-page');
+    });
+}
+
+// Animation d'analyse
+function startAnalysisAnimation() {
+    const messageContainer = document.getElementById('analysis-messages');
+    if (!messageContainer) return;
+    
+    messageContainer.innerHTML = '';
+    
+    const messages = [
+        { text: "Chargement des données historiques...", delay: 600 },
+        { text: "Analyse des confrontations directes...", delay: 1200 },
+        { text: "Évaluation des performances récentes...", delay: 1800 },
+        { text: "Calcul des probabilités de scores...", delay: 2400 },
+        { text: "Génération des prédictions finales...", delay: 3000 },
+        { text: "Prédictions prêtes!", delay: 3600 }
+    ];
+    
+    messages.forEach((message, index) => {
+        setTimeout(() => {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'analysis-message';
+            messageElement.innerHTML = `<i class="fas fa-angle-right"></i> ${message.text}`;
+            messageContainer.appendChild(messageElement);
+            
+            // Animation d'apparition
+            messageElement.style.opacity = 0;
+            messageElement.style.transform = 'translateY(10px)';
+            
+            setTimeout(() => {
+                messageElement.style.opacity = 1;
+                messageElement.style.transform = 'translateY(0)';
+            }, 50);
+            
+            // Faire défiler automatiquement
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        }, message.delay);
+    });
 }
 
 // Vérification d'abonnement au canal
@@ -91,16 +190,11 @@ function checkSubscription() {
     loadingEl.style.display = 'flex';
     verifyBtn.style.display = 'none';
     
-    // Dans une application réelle, vous devriez vérifier l'abonnement auprès de l'API Telegram.
-    // Puisque c'est compliqué à faire directement depuis le frontend, nous allons rediriger
-    // l'utilisateur vers le bot pour effectuer la vérification.
-    
+    // Dans une vraie application, il faudrait un backend sécurisé pour cette vérification
+    // Pour cette démo, nous simulons une vérification positive après un délai
     setTimeout(function() {
         // Masquer le chargement
         loadingEl.style.display = 'none';
-        
-        // Afficher l'alerte avec les instructions
-        alert(`Pour vérifier votre abonnement au canal ${config.channelId}, veuillez envoyer la commande /check à notre bot ${config.botUsername}.\n\nAprès avoir reçu confirmation, revenez ici et cliquez sur "Continuer".`);
         
         // Afficher la confirmation et le bouton pour continuer
         confirmationEl.classList.add('show');
@@ -205,91 +299,89 @@ function populateTeamDropdowns(teams) {
 }
 
 // Récupération des prédictions
-function getPrediction() {
-    console.log("Demande de prédiction");
+function getPrediction(team1, team2, odds1, odds2) {
+    console.log("Génération de prédiction");
     
-    const team1 = document.getElementById('team1').value;
-    const team2 = document.getElementById('team2').value;
-    const odds1 = document.getElementById('odds1').value;
-    const odds2 = document.getElementById('odds2').value;
+    // Générer des prédictions
+    const prediction = generatePrediction(team1, team2, odds1, odds2);
+    console.log("Prédiction générée", prediction);
     
-    // Validation
-    if (!team1 || !team2) {
-        alert('Veuillez sélectionner les deux équipes.');
-        return;
-    }
+    // Afficher les résultats
+    displayPrediction(prediction);
     
-    if (team1 === team2) {
-        alert('Veuillez sélectionner deux équipes différentes.');
-        return;
-    }
-    
-    console.log(`Prédiction pour ${team1} vs ${team2}`);
-    
-    // Afficher le chargement
-    const loadingEl = document.getElementById('loading-prediction');
-    const resultsEl = document.getElementById('prediction-results');
-    
-    loadingEl.style.display = 'flex';
-    resultsEl.style.display = 'none';
-    
-    // Faire défiler jusqu'au chargement
-    loadingEl.scrollIntoView({ behavior: 'smooth' });
-    
-    // Simuler un délai de chargement
-    // Dans une application réelle, vous feriez une requête vers votre API
-    setTimeout(() => {
-        // Masquer le chargement
-        loadingEl.style.display = 'none';
-        
-        // Générer des prédictions
-        const prediction = generatePrediction(team1, team2, odds1, odds2);
-        console.log("Prédiction générée", prediction);
-        
-        // Afficher les résultats
-        displayPrediction(prediction);
-        
-        // Afficher le conteneur de résultats
-        resultsEl.style.display = 'block';
-        
-        // Faire défiler jusqu'aux résultats
-        resultsEl.scrollIntoView({ behavior: 'smooth' });
-    }, 2000);
+    // Afficher la page des résultats
+    showPage('results-page');
 }
 
 // Fonction pour générer des prédictions
 function generatePrediction(team1, team2, odds1, odds2) {
     // Dans une version réelle, cette fonction appelerait votre API backend
-    // ou communiquerait avec votre bot Telegram pour obtenir les vraies prédictions.
+    // Génération de données aléatoires pour la démo
     
-    // Pour cette version exemple, génération aléatoire
+    // Scores mi-temps (exactement 2)
+    const halfTimeScores = [
+        { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 30) + 60 },
+        { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 20) + 50 }
+    ];
+    
+    // Scores temps réglementaire (exactement 2)
+    const fullTimeScores = [
+        { score: Math.floor(Math.random() * 5) + ":" + Math.floor(Math.random() * 5), confidence: Math.floor(Math.random() * 30) + 60 },
+        { score: Math.floor(Math.random() * 5) + ":" + Math.floor(Math.random() * 5), confidence: Math.floor(Math.random() * 20) + 50 }
+    ];
+    
+    // Déterminer le gagnant mi-temps
+    const halfTimeWinnerRandom = Math.random();
+    let halfTimeWinner;
+    if (halfTimeWinnerRandom < 0.4) {
+        halfTimeWinner = team1;
+    } else if (halfTimeWinnerRandom < 0.8) {
+        halfTimeWinner = team2;
+    } else {
+        halfTimeWinner = "Nul";
+    }
+    
+    // Déterminer le gagnant temps réglementaire
+    const fullTimeWinnerRandom = Math.random();
+    let fullTimeWinner;
+    if (fullTimeWinnerRandom < 0.4) {
+        fullTimeWinner = team1;
+    } else if (fullTimeWinnerRandom < 0.8) {
+        fullTimeWinner = team2;
+    } else {
+        fullTimeWinner = "Nul";
+    }
+    
+    // Générer les moyennes de buts au format paris sportif
+    const halfTimeGoalsThresholds = [0.5, 1.5, 2.5, 3.5];
+    const fullTimeGoalsThresholds = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
+    
+    const halfTimeGoals = halfTimeGoalsThresholds[Math.floor(Math.random() * halfTimeGoalsThresholds.length)];
+    const fullTimeGoals = fullTimeGoalsThresholds[Math.floor(Math.random() * fullTimeGoalsThresholds.length)];
+    
     return {
         teams: {
             team1: team1,
             team2: team2
         },
         odds: {
-            team1: odds1 || null,
-            team2: odds2 || null
+            team1: odds1,
+            team2: odds2
         },
         direct_matches: Math.floor(Math.random() * 50) + 10,
-        half_time_scores: [
-            { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 30) + 60 },
-            { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 20) + 50 },
-            { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 2), confidence: Math.floor(Math.random() * 20) + 40 }
-        ],
-        full_time_scores: [
-            { score: Math.floor(Math.random() * 5) + ":" + Math.floor(Math.random() * 5), confidence: Math.floor(Math.random() * 30) + 60 },
-            { score: Math.floor(Math.random() * 5) + ":" + Math.floor(Math.random() * 5), confidence: Math.floor(Math.random() * 20) + 50 },
-            { score: Math.floor(Math.random() * 4) + ":" + Math.floor(Math.random() * 4), confidence: Math.floor(Math.random() * 20) + 40 }
-        ],
+        half_time_scores: halfTimeScores,
+        full_time_scores: fullTimeScores,
         winner_half_time: {
-            team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Nul"),
+            team: halfTimeWinner,
             probability: Math.floor(Math.random() * 30) + 60
         },
         winner_full_time: {
-            team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Nul"),
+            team: fullTimeWinner,
             probability: Math.floor(Math.random() * 30) + 60
+        },
+        goals_thresholds: {
+            half_time: halfTimeGoals,
+            full_time: fullTimeGoals
         },
         avg_goals_half_time: (Math.random() * 3 + 1).toFixed(1),
         avg_goals_full_time: (Math.random() * 5 + 2).toFixed(1),
@@ -301,123 +393,52 @@ function generatePrediction(team1, team2, odds1, odds2) {
 function displayPrediction(prediction) {
     console.log("Affichage des résultats de prédiction");
     
-    const resultsEl = document.getElementById('prediction-results');
-    if (!resultsEl) return;
+    // Mettre à jour les éléments du DOM
+    document.getElementById('match-teams').textContent = `${prediction.teams.team1} vs ${prediction.teams.team2}`;
     
-    // Construire le HTML des résultats
-    let html = `
-        <div class="prediction-header">
-            <div class="teams-title">${prediction.teams.team1} vs ${prediction.teams.team2}</div>
-            <div class="confidence-badge">Confiance: ${prediction.confidence_level}%</div>
-        </div>
-        
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-clock"></i> Scores prévus (1ère mi-temps)
-            </div>
-            <ul class="score-list">
-    `;
-    
-    // Ajouter les scores mi-temps
+    // Afficher les scores mi-temps
+    const halfTimeScores = document.getElementById('half-time-scores');
+    halfTimeScores.innerHTML = '';
     prediction.half_time_scores.forEach(score => {
-        html += `
-            <li class="score-item">
-                <span class="score-value">${score.score}</span>
-                <span class="score-confidence">${score.confidence}%</span>
-            </li>
+        const scoreItem = document.createElement('div');
+        scoreItem.className = 'score-card';
+        scoreItem.innerHTML = `
+            <div class="score-value">${score.score}</div>
+            <div class="score-confidence">Confiance: ${score.confidence}%</div>
         `;
+        halfTimeScores.appendChild(scoreItem);
     });
     
-    // Ajouter le gagnant mi-temps
-    html += `
-            </ul>
-            <div class="winner-box">
-                <p>Prédiction mi-temps: <span class="winner-team">${prediction.winner_half_time.team === "Nul" ? "Match nul" : prediction.winner_half_time.team}</span> (${prediction.winner_half_time.probability}%)</p>
-            </div>
-        </div>
-        
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-futbol"></i> Scores prévus (temps réglementaire)
-            </div>
-            <ul class="score-list">
-    `;
-    
-    // Ajouter les scores temps réglementaire
+    // Afficher les scores temps réglementaire
+    const fullTimeScores = document.getElementById('full-time-scores');
+    fullTimeScores.innerHTML = '';
     prediction.full_time_scores.forEach(score => {
-        html += `
-            <li class="score-item">
-                <span class="score-value">${score.score}</span>
-                <span class="score-confidence">${score.confidence}%</span>
-            </li>
+        const scoreItem = document.createElement('div');
+        scoreItem.className = 'score-card';
+        scoreItem.innerHTML = `
+            <div class="score-value">${score.score}</div>
+            <div class="score-confidence">Confiance: ${score.confidence}%</div>
         `;
+        fullTimeScores.appendChild(scoreItem);
     });
     
-    // Ajouter le gagnant temps réglementaire
-    html += `
-            </ul>
-            <div class="winner-box">
-                <p>Prédiction finale: <span class="winner-team">${prediction.winner_full_time.team === "Nul" ? "Match nul" : prediction.winner_full_time.team}</span> (${prediction.winner_full_time.probability}%)</p>
-            </div>
-        </div>
-        
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-chart-bar"></i> Statistiques moyennes
-            </div>
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value">${prediction.avg_goals_half_time}</div>
-                    <div class="stat-label">Buts 1ère mi-temps</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value">${prediction.avg_goals_full_time}</div>
-                    <div class="stat-label">Buts temps réglementaire</div>
-                </div>
-            </div>
-        </div>
-    `;
+    // Afficher les gagnants
+    document.getElementById('half-time-winner').textContent = prediction.winner_half_time.team === "Nul" ? "Match nul" : prediction.winner_half_time.team;
+    document.getElementById('half-time-probability').textContent = prediction.winner_half_time.probability + '%';
     
-    // Ajouter les cotes si disponibles
-    if (prediction.odds.team1 && prediction.odds.team2) {
-        html += `
-            <div class="prediction-section">
-                <div class="section-title">
-                    <i class="fas fa-coins"></i> Cotes
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <div class="stat-value">${prediction.odds.team1}</div>
-                        <div class="stat-label">${prediction.teams.team1}</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${prediction.odds.team2}</div>
-                        <div class="stat-label">${prediction.teams.team2}</div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
+    document.getElementById('full-time-winner').textContent = prediction.winner_full_time.team === "Nul" ? "Match nul" : prediction.winner_full_time.team;
+    document.getElementById('full-time-probability').textContent = prediction.winner_full_time.probability + '%';
     
-    // Ajouter une information sur les confrontations directes
-    html += `
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-handshake"></i> Confrontations
-            </div>
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value">${prediction.direct_matches}</div>
-                    <div class="stat-label">Matchs analysés</div>
-                </div>
-            </div>
-        </div>
-        
-        <button id="new-prediction" class="btn" onclick="showPage('prediction-page')">
-            <i class="fas fa-sync"></i> Nouvelle prédiction
-        </button>
-    `;
+    // Afficher les seuils de buts
+    document.getElementById('half-time-goals').textContent = prediction.goals_thresholds.half_time;
+    document.getElementById('full-time-goals').textContent = prediction.goals_thresholds.full_time;
     
-    // Insérer le HTML dans l'élément
-    resultsEl.innerHTML = html;
+    // Afficher les cotes
+    document.getElementById('team1-name').textContent = prediction.teams.team1;
+    document.getElementById('team1-odds').textContent = prediction.odds.team1;
+    document.getElementById('team2-name').textContent = prediction.teams.team2;
+    document.getElementById('team2-odds').textContent = prediction.odds.team2;
+    
+    // Afficher le nombre de confrontations
+    document.getElementById('direct-matches').textContent = prediction.direct_matches;
 }

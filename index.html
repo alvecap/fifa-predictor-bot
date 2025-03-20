@@ -9,7 +9,9 @@
     <style>
         :root {
             --tg-color: #0088cc;
-            --tg-gradient: linear-gradient(to right, #0088cc, #33a9dc);
+            --tg-gradient: linear-gradient(135deg, #0088cc, #33a9dc);
+            --premium-gold: #ffd700;
+            --premium-gradient: linear-gradient(135deg, #b8860b, #ffd700);
         }
         
         * {
@@ -20,7 +22,7 @@
         }
         
         body {
-            background-color: #f8f9fa;
+            background-color: #f0f2f5;
             color: #333;
             line-height: 1.5;
         }
@@ -37,143 +39,262 @@
             display: block;
         }
         
+        .logo-container {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-top: 20px;
+        }
+        
         .logo {
-            width: 80px;
-            height: 80px;
+            width: 90px;
+            height: 90px;
             margin: 0 auto 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: var(--tg-color);
+            background: var(--tg-gradient);
             border-radius: 50%;
             color: white;
             font-size: 40px;
+            box-shadow: 0 4px 20px rgba(0, 136, 204, 0.3);
+            position: relative;
+            overflow: hidden;
         }
         
-        h1 {
+        .logo:after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -50%;
+            width: 200%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: rotate(45deg);
+        }
+        
+        .main-title {
             text-align: center;
-            margin-bottom: 30px;
-            font-size: 28px;
+            margin-bottom: 20px;
+            font-size: 32px;
+            font-weight: 800;
+            color: #333;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .subtitle {
+            text-align: center;
+            margin-bottom: 25px;
+            font-size: 24px;
             font-weight: 700;
+            color: #444;
+            position: relative;
+            display: inline-block;
+            padding-bottom: 10px;
         }
         
-        h2 {
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 22px;
-            font-weight: 600;
+        .subtitle:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 3px;
+            background: var(--tg-gradient);
+            border-radius: 3px;
         }
         
-        p {
+        .description-box {
+            background-color: white;
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
             text-align: center;
-            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            position: relative;
+        }
+        
+        .description-text {
+            font-size: 16px;
+            line-height: 1.6;
             color: #555;
+            margin-bottom: 20px;
         }
         
         .channel-name {
-            text-align: center;
-            margin: 15px 0;
-            font-weight: 700;
-            font-size: 20px;
+            display: inline-block;
+            padding: 10px 25px;
+            background: var(--premium-gradient);
+            color: #333;
+            font-weight: 800;
+            font-size: 22px;
+            border-radius: 50px;
+            margin: 10px 0 20px;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 15px rgba(184, 134, 11, 0.3);
+        }
+        
+        .channel-name i {
+            margin-right: 8px;
         }
         
         .benefits {
-            margin: 20px 0;
+            margin: 25px 0;
         }
         
         .benefit {
             display: flex;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
         }
         
-        .benefit i {
-            margin-right: 10px;
+        .benefit:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .benefit-icon {
+            flex-shrink: 0;
+            width: 32px;
+            height: 32px;
+            background-color: #e3f2fd;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
             color: var(--tg-color);
+        }
+        
+        .benefit-text {
+            font-size: 16px;
+            color: #444;
+            font-weight: 500;
         }
         
         .btn {
             display: block;
             width: 100%;
-            padding: 14px;
+            padding: 16px;
             border: none;
             background: var(--tg-gradient);
             color: white;
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 600;
-            border-radius: 8px;
+            border-radius: 12px;
             cursor: pointer;
             margin: 20px 0;
             text-align: center;
             text-decoration: none;
+            box-shadow: 0 4px 15px rgba(0, 136, 204, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 136, 204, 0.3);
         }
         
         .btn:active {
-            opacity: 0.8;
+            transform: translateY(1px);
+            box-shadow: 0 2px 10px rgba(0, 136, 204, 0.2);
         }
         
         .btn-outline {
-            background: transparent;
+            background: white;
             border: 2px solid var(--tg-color);
             color: var(--tg-color);
         }
         
+        .btn-outline:hover {
+            background: #f0f8ff;
+        }
+        
         .footer-text {
             text-align: center;
-            margin-top: 20px;
+            margin-top: 25px;
             font-size: 14px;
             color: #777;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .footer-text i {
+            margin-right: 8px;
+            color: #888;
         }
         
         .loading {
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin: 20px 0;
+            margin: 30px 0;
             display: none;
         }
         
         .spinner {
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             border: 4px solid rgba(0, 136, 204, 0.2);
             border-radius: 50%;
             border-top-color: var(--tg-color);
-            animation: spin 1s linear infinite;
+            animation: spin 1.2s linear infinite;
             margin-bottom: 15px;
         }
         
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 136, 204, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(0, 136, 204, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 136, 204, 0); }
+        }
     </style>
 </head>
 <body>
     <!-- Page 1: Vérification d'abonnement -->
     <div id="subscription-check" class="page active">
-        <div class="logo">
-            <i class="fab fa-telegram"></i>
-        </div>
-        <h1>FIFA 4x4 Predictor</h1>
-        <h2>Accès Premium Requis</h2>
-        <p>Pour accéder à notre outil de prédiction avancé, vous devez être membre de notre canal Telegram officiel:</p>
-        
-        <div class="channel-name">
-            <i class="fas fa-crown"></i> ALVEC CAPITAL
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fab fa-telegram"></i>
+            </div>
         </div>
         
-        <div class="benefits">
-            <div class="benefit">
-                <i class="fas fa-check-circle"></i>
-                <span>Prédictions précises basées sur l'IA</span>
+        <h1 class="main-title">FIFA 4x4 Predictor</h1>
+        <h2 class="subtitle">Accès Premium Requis</h2>
+        
+        <div class="description-box">
+            <p class="description-text">Pour accéder à notre outil de prédiction avancé, vous devez être membre de notre canal Telegram officiel:</p>
+            
+            <div class="channel-name">
+                <i class="fas fa-crown"></i> AL VE CAPITAL
             </div>
-            <div class="benefit">
-                <i class="fas fa-check-circle"></i>
-                <span>Analyses détaillées des matchs</span>
-            </div>
-            <div class="benefit">
-                <i class="fas fa-check-circle"></i>
-                <span>Recommandations en temps réel</span>
+            
+            <div class="benefits">
+                <div class="benefit">
+                    <div class="benefit-icon">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <span class="benefit-text">Prédictions précises basées sur l'IA</span>
+                </div>
+                <div class="benefit">
+                    <div class="benefit-icon">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <span class="benefit-text">Analyses détaillées des matchs</span>
+                </div>
+                <div class="benefit">
+                    <div class="benefit-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <span class="benefit-text">Recommandations en temps réel</span>
+                </div>
             </div>
         </div>
         
@@ -190,9 +311,9 @@
             <p>Vérification en cours...</p>
         </div>
         
-        <p class="footer-text">
+        <div class="footer-text">
             <i class="fas fa-lock"></i> Cet outil est exclusivement réservé aux membres
-        </p>
+        </div>
     </div>
 
     <!-- Page 2: Application principale -->
@@ -223,12 +344,16 @@
                         // Pour l'instant, juste un message
                         document.getElementById('prediction-page').classList.add('active');
                         document.getElementById('prediction-page').innerHTML = `
-                            <div class="logo">
-                                <i class="fas fa-futbol"></i>
+                            <div class="logo-container">
+                                <div class="logo">
+                                    <i class="fas fa-futbol"></i>
+                                </div>
                             </div>
-                            <h1>FIFA 4x4 Predictor</h1>
-                            <p>Félicitations! Votre abonnement a été vérifié.</p>
-                            <p>Vous pouvez maintenant accéder à notre outil de prédiction.</p>
+                            <h1 class="main-title">FIFA 4x4 Predictor</h1>
+                            <div class="description-box">
+                                <p class="description-text">Félicitations! Votre abonnement à AL VE CAPITAL a été vérifié.</p>
+                                <p class="description-text">Vous pouvez maintenant accéder à notre outil de prédiction premium.</p>
+                            </div>
                             <button class="btn" onclick="startApp()">
                                 Commencer
                             </button>
@@ -241,11 +366,16 @@
         function startApp() {
             // Ici vous pouvez charger l'application complète
             document.getElementById('prediction-page').innerHTML = `
-                <div class="logo">
-                    <i class="fas fa-futbol"></i>
+                <div class="logo-container">
+                    <div class="logo">
+                        <i class="fas fa-futbol"></i>
+                    </div>
                 </div>
-                <h1>FIFA 4x4 Predictor</h1>
-                <p>Application en cours de développement...</p>
+                <h1 class="main-title">FIFA 4x4 Predictor</h1>
+                <div class="description-box">
+                    <p class="description-text">Application en cours de développement...</p>
+                    <p class="description-text">Notre équipe travaille pour vous offrir la meilleure expérience de prédiction possible.</p>
+                </div>
             `;
         }
     </script>

@@ -1,100 +1,18 @@
 // Initialisation de l'application
 document.addEventListener("DOMContentLoaded", function() {
-    // Initialiser les événements
-    initEvents();
-    
-    // Charger la liste des équipes
-    loadTeamsList();
-    
-    // Essayer d'initialiser Telegram WebApp si disponible
-    try {
-        if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.ready();
-            console.log("Telegram WebApp initialisé avec succès");
-        }
-    } catch (error) {
-        console.warn("Telegram WebApp non disponible:", error);
-    }
-});
-
-// Initialisation des événements
-function initEvents() {
-    // Bouton de vérification d'abonnement
-    const verifyBtn = document.getElementById('verify-subscription');
-    if (verifyBtn) {
-        verifyBtn.addEventListener('click', checkSubscription);
-    }
-    
-    // Bouton pour continuer après vérification d'abonnement
-    const continueBtn = document.getElementById('continue-to-app');
-    if (continueBtn) {
-        continueBtn.addEventListener('click', function() {
-            showPage('game-intro');
-        });
-    }
-    
-    // Bouton pour commencer les prédictions
-    const startBtn = document.getElementById('start-prediction');
-    if (startBtn) {
-        startBtn.addEventListener('click', function() {
-            showPage('prediction-page');
-        });
-    }
-    
-    // Bouton pour retourner à l'introduction
-    const backBtn = document.getElementById('go-back');
-    if (backBtn) {
-        backBtn.addEventListener('click', function() {
-            showPage('game-intro');
-        });
-    }
-    
-    // Bouton de prédiction
-    const predictBtn = document.getElementById('predict-button');
-    if (predictBtn) {
-        predictBtn.addEventListener('click', getPrediction);
-    }
-}
-
-// Vérification d'abonnement au canal - Version GARANTIE fonctionnelle
-function checkSubscription() {
-    const loadingEl = document.getElementById('loading-verification');
-    const verifyBtn = document.getElementById('verify-subscription');
-    const continueBtn = document.getElementById('continue-to-app');
-    const confirmationEl = document.getElementById('subscription-confirmed');
-    
-    // Afficher le chargement
-    loadingEl.style.display = 'flex';
-    verifyBtn.style.display = 'none';
-    
-    // Pour la démo, nous simulons toujours une vérification réussie après 2 secondes
-    setTimeout(function() {
-        // Masquer le chargement
-        loadingEl.style.display = 'none';
+    // Initialiser l'API Telegram WebApp
+    if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        console.log("Telegram WebApp initialisé avec succès");
         
-        // Afficher la confirmation d'abonnement
-        confirmationEl.classList.add('show');
-        
-        // Afficher le bouton pour continuer
-        continueBtn.style.display = 'block';
-        
-        // Animation pour attirer l'attention
-        try {
-            confirmationEl.animate([
-                { transform: 'scale(0.95)' },
-                { transform: 'scale(1.05)' },
-                { transform: 'scale(1)' }
-            ], {
-                duration: 600,
-                easing: 'ease-out'
-            });
-        } catch (error) {
-            console.warn("Animation API non supportée dans ce navigateur");
-        }
-    }, 2000);
-}
-
-// Changement de page
+        // Changer les couleurs pour correspondre au thème Telegram
+        const webAppData = window.Telegram.WebApp;
+        if (webAppData.themeParams) {
+            document.documentElement.style.setProperty('--background-color', webAppData.themeParams.bg_color || '#f7f9fb');
+            document.documentElement.style.setProperty('--card-color', webAppData.themeParams.secondary_bg_color || '#ffffff');
+            document.documentElement.style.setProperty('--text-color', webAppData.themeParams.text_color || '#333333');
+            document.documentElement.style.setProperty('--text-secondary', webAppData.themeParams.hint_color || '#666666');
+        // Changement de page
 function showPage(pageId) {
     // Masquer toutes les pages
     document.querySelectorAll('.page').forEach(page => {
@@ -113,8 +31,64 @@ function showPage(pageId) {
 
 // Chargement de la liste des équipes
 function loadTeamsList() {
-    // Liste d'équipes à titre d'exemple
-    const teams = [
+    // Tenter de charger les équipes depuis l'API
+    fetch(`${config.apiBaseUrl}/teams`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && Array.isArray(data.teams) && data.teams.length > 0) {
+                populateTeamDropdowns(data.teams);
+            } else {
+                console.warn("Format de données d'équipes invalide, utilisation des équipes par défaut");
+                populateTeamDropdowns(getDefaultTeams());
+            }
+        })
+        .catch(error => {
+            console.warn(`Impossible de charger les équipes depuis l'API: ${error.message}`);
+            console.info("Utilisation des équipes par défaut");
+            populateTeamDropdowns(getDefaultTeams());
+        });
+}
+
+// Fonction pour remplir les dropdown avec les équipes
+function populateTeamDropdowns(teams) {
+    // Tri alphabétique
+    const sortedTeams = Array.isArray(teams) ? [...teams].sort() : [];
+    
+    // Remplir les listes déroulantes
+    const team1Select = document.getElementById('team1');
+    const team2Select = document.getElementById('team2');
+    
+    if (team1Select && team2Select) {
+        // Vider les listes pour éviter les doublons
+        team1Select.innerHTML = '<option value="" disabled selected>Sélectionner une équipe</option>';
+        team2Select.innerHTML = '<option value="" disabled selected>Sélectionner une équipe</option>';
+        
+        sortedTeams.forEach(team => {
+            // S'assurer que le nom de l'équipe est une chaîne
+            const teamName = typeof team === 'string' ? team : 
+                            (team.name ? team.name : String(team));
+            
+            const option1 = document.createElement('option');
+            option1.value = teamName;
+            option1.textContent = teamName;
+            team1Select.appendChild(option1);
+            
+            const option2 = document.createElement('option');
+            option2.value = teamName;
+            option2.textContent = teamName;
+            team2Select.appendChild(option2);
+        });
+    }
+}
+
+// Liste d'équipes par défaut au cas où l'API ne répond pas
+function getDefaultTeams() {
+    return [
         "Manchester United",
         "Chelsea",
         "Arsenal",
@@ -135,29 +109,7 @@ function loadTeamsList() {
         "Luton Town",
         "Burnley",
         "Sheffield United"
-    ].sort();
-    
-    // Remplir les listes déroulantes
-    const team1Select = document.getElementById('team1');
-    const team2Select = document.getElementById('team2');
-    
-    if (team1Select && team2Select) {
-        // Vider les listes pour éviter les doublons
-        team1Select.innerHTML = '<option value="" disabled selected>Sélectionner une équipe</option>';
-        team2Select.innerHTML = '<option value="" disabled selected>Sélectionner une équipe</option>';
-        
-        teams.forEach(team => {
-            const option1 = document.createElement('option');
-            option1.value = team;
-            option1.textContent = team;
-            team1Select.appendChild(option1);
-            
-            const option2 = document.createElement('option');
-            option2.value = team;
-            option2.textContent = team;
-            team2Select.appendChild(option2);
-        });
-    }
+    ];
 }
 
 // Récupération des prédictions
@@ -188,13 +140,30 @@ function getPrediction() {
     // Faire défiler jusqu'au chargement
     loadingEl.scrollIntoView({ behavior: 'smooth' });
     
-    // Pour la démo, nous simulons une réponse
-    setTimeout(() => {
+    // Appeler l'API de prédiction
+    const requestData = {
+        team1: team1,
+        team2: team2,
+        odds1: odds1 || null,
+        odds2: odds2 || null
+    };
+    
+    fetch(`${config.apiBaseUrl}/predict`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(prediction => {
         // Masquer le chargement
         loadingEl.style.display = 'none';
-        
-        // Générer de fausses prédictions pour la démo
-        const prediction = generateMockPrediction(team1, team2, odds1, odds2);
         
         // Afficher les résultats
         displayPrediction(prediction);
@@ -204,10 +173,30 @@ function getPrediction() {
         
         // Faire défiler jusqu'aux résultats
         resultsEl.scrollIntoView({ behavior: 'smooth' });
-    }, 3500); // Simulation de 3.5 secondes
+    })
+    .catch(error => {
+        console.error('Erreur lors de la prédiction:', error);
+        loadingEl.style.display = 'none';
+        
+        // En cas d'erreur, générer des prédictions aléatoires pour la démo
+        console.warn("Utilisation de prédictions aléatoires en raison d'une erreur de l'API");
+        const fallbackPrediction = generateMockPrediction(team1, team2, odds1, odds2);
+        
+        // Afficher les résultats
+        displayPrediction(fallbackPrediction);
+        
+        // Afficher le conteneur de résultats
+        resultsEl.style.display = 'block';
+        
+        // Faire défiler jusqu'aux résultats
+        resultsEl.scrollIntoView({ behavior: 'smooth' });
+        
+        // Alerter l'utilisateur du problème
+        alert(`Une erreur est survenue lors de la récupération des prédictions. Des données simulées sont affichées.\nDétails: ${error.message}`);
+    });
 }
 
-// Génération de prédictions simulées pour la démo
+// Génération de prédictions simulées pour la démo ou en cas d'erreur API
 function generateMockPrediction(team1, team2, odds1, odds2) {
     // Ces données seraient normalement obtenues depuis votre API
     return {
@@ -365,4 +354,149 @@ function displayPrediction(prediction) {
     
     // Insérer le HTML dans l'élément
     resultsEl.innerHTML = html;
+}
+    } else {
+        console.warn("Telegram WebApp non disponible - l'application fonctionnera avec des fonctionnalités limitées");
+    }
+    
+    // Initialiser les événements
+    initEvents();
+    
+    // Charger la liste des équipes
+    loadTeamsList();
+});
+
+// Configuration
+const config = {
+    // ID de votre canal Telegram
+    channelId: '@alvecapital1',
+    // URL de votre API backend (vous devez avoir un serveur backend pour la vérification d'abonnement)
+    apiBaseUrl: 'https://votre-api-backend.com/api'
+};
+
+// Initialisation des événements
+function initEvents() {
+    // Bouton de vérification d'abonnement
+    const verifyBtn = document.getElementById('verify-subscription');
+    if (verifyBtn) {
+        verifyBtn.addEventListener('click', checkSubscription);
+    }
+    
+    // Bouton pour continuer après vérification d'abonnement
+    const continueBtn = document.getElementById('continue-to-app');
+    if (continueBtn) {
+        continueBtn.addEventListener('click', function() {
+            showPage('game-intro');
+        });
+    }
+    
+    // Bouton pour commencer les prédictions
+    const startBtn = document.getElementById('start-prediction');
+    if (startBtn) {
+        startBtn.addEventListener('click', function() {
+            showPage('prediction-page');
+        });
+    }
+    
+    // Bouton pour retourner à l'introduction
+    const backBtn = document.getElementById('go-back');
+    if (backBtn) {
+        backBtn.addEventListener('click', function() {
+            showPage('game-intro');
+        });
+    }
+    
+    // Bouton de prédiction
+    const predictBtn = document.getElementById('predict-button');
+    if (predictBtn) {
+        predictBtn.addEventListener('click', getPrediction);
+    }
+}
+
+// Vérification d'abonnement au canal
+function checkSubscription() {
+    const loadingEl = document.getElementById('loading-verification');
+    const verifyBtn = document.getElementById('verify-subscription');
+    const continueBtn = document.getElementById('continue-to-app');
+    const confirmationEl = document.getElementById('subscription-confirmed');
+    
+    // Afficher le chargement
+    loadingEl.style.display = 'flex';
+    verifyBtn.style.display = 'none';
+    
+    // Vérification via Telegram WebApp ou API
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe) {
+        // Récupérer les données de l'utilisateur depuis Telegram
+        const userId = window.Telegram.WebApp.initDataUnsafe.user ? window.Telegram.WebApp.initDataUnsafe.user.id : null;
+        
+        if (!userId) {
+            console.error("Impossible d'obtenir l'ID utilisateur depuis Telegram");
+            loadingEl.style.display = 'none';
+            verifyBtn.style.display = 'block';
+            alert("Erreur: Impossible d'obtenir vos informations utilisateur. Veuillez réessayer ou contacter le support.");
+            return;
+        }
+        
+        // Appel à l'API backend pour vérifier l'abonnement
+        fetch(`${config.apiBaseUrl}/check-subscription`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId: userId,
+                channelId: config.channelId
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Masquer le chargement
+            loadingEl.style.display = 'none';
+            
+            if (data.isSubscribed) {
+                // Accès autorisé - Afficher la confirmation
+                confirmationEl.classList.add('show');
+                continueBtn.style.display = 'block';
+                
+                // Animation pour attirer l'attention
+                if (confirmationEl.animate) {
+                    confirmationEl.animate([
+                        { transform: 'scale(0.95)' },
+                        { transform: 'scale(1.05)' },
+                        { transform: 'scale(1)' }
+                    ], {
+                        duration: 600,
+                        easing: 'ease-out'
+                    });
+                }
+            } else {
+                // Abonnement non vérifié - Afficher un message d'erreur
+                verifyBtn.style.display = 'block';
+                alert(`Vous devez être abonné au canal ${config.channelId} pour utiliser cette application. Veuillez vous abonner puis réessayer.`);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur de vérification:', error);
+            loadingEl.style.display = 'none';
+            verifyBtn.style.display = 'block';
+            alert(`Une erreur est survenue lors de la vérification. Veuillez réessayer ou contacter le support.\nDétails: ${error.message}`);
+        });
+    } else {
+        // Méthode alternative si Telegram WebApp n'est pas disponible
+        // Cette méthode requiert un backend avec un système d'authentification
+        console.warn("Vérification alternative utilisée - Telegram WebApp n'est pas disponible");
+        
+        // Vous devrez implémenter une solution alternative ici
+        // Par exemple, rediriger vers une page de connexion Telegram
+        
+        // Pour la démo, nous affichons un message d'erreur
+        loadingEl.style.display = 'none';
+        verifyBtn.style.display = 'block';
+        alert("Cette application doit être utilisée depuis Telegram. Veuillez ouvrir l'application via le bot Telegram.");
+    }
 }

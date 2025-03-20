@@ -7,13 +7,16 @@
     <link rel="stylesheet" href="styles.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-container">
-        <!-- Page de vérification d'abonnement -->
+        <!-- Page 1: Vérification d'abonnement -->
         <div id="subscription-check" class="page active">
             <div class="logo-container">
-                <div class="logo-circle">
+                <div class="logo-circle pulse-animation">
                     <i class="fas fa-futbol"></i>
                 </div>
                 <h1>FIFA 4x4 Predictor</h1>
@@ -23,15 +26,35 @@
                 <div class="telegram-icon">
                     <i class="fab fa-telegram"></i>
                 </div>
-                <h2>Vérification d'abonnement</h2>
-                <p>Pour accéder aux prédictions premium, vous devez être abonné à <strong>alvecapital1</strong>, notre canal d'analyse principal.</p>
+                <h2>Accès Premium Requis</h2>
+                <div class="description">
+                    <p>Pour accéder à notre outil de prédiction avancé, vous devez être membre de notre canal Telegram officiel:</p>
+                    <div class="channel-name">
+                        <i class="fas fa-crown"></i> ALVEC CAPITAL
+                    </div>
+                </div>
+                
+                <div class="benefits">
+                    <div class="benefit-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Prédictions précises basées sur l'IA</span>
+                    </div>
+                    <div class="benefit-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Analyses détaillées des matchs</span>
+                    </div>
+                    <div class="benefit-item">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Recommandations en temps réel</span>
+                    </div>
+                </div>
                 
                 <a href="https://t.me/alvecapital1" class="channel-link" target="_blank">
-                    <i class="fas fa-external-link-alt"></i> Rejoindre ALVEC CAPITAL
+                    <i class="fas fa-external-link-alt"></i> Rejoindre le canal maintenant
                 </a>
                 
                 <button id="verify-subscription" class="verify-button">
-                    <i class="fas fa-check-circle"></i> Vérifier mon abonnement
+                    <i class="fas fa-shield-check"></i> Vérifier mon abonnement
                 </button>
                 
                 <div id="loading-verification" class="loading-container" style="display: none;">
@@ -39,13 +62,60 @@
                     <p>Vérification en cours...</p>
                 </div>
                 
-                <div class="premium-badge">
-                    <i class="fas fa-crown"></i> Analyse de qualité Premium
+                <div class="lock-message">
+                    <i class="fas fa-lock"></i> Cet outil est exclusivement réservé aux membres
                 </div>
             </div>
         </div>
 
-        <!-- Page principale de prédiction -->
+        <!-- Page 2: Introduction au jeu -->
+        <div id="game-intro" class="page">
+            <div class="intro-header">
+                <div class="header-container">
+                    <div class="logo-small">
+                        <i class="fas fa-futbol"></i>
+                    </div>
+                    <h1>FIFA 4x4 Predictor</h1>
+                </div>
+            </div>
+
+            <div class="intro-card">
+                <h2>Bienvenue dans le monde du FIFA 4x4</h2>
+                <div class="game-description">
+                    <p>FIFA 4x4 est un jeu virtuel de football qui simule des matchs entre les meilleures équipes du monde.</p>
+                    
+                    <div class="feature-grid">
+                        <div class="feature">
+                            <div class="feature-icon">
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                            <h3>Rapide</h3>
+                            <p>Matchs de 5 minutes</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <h3>Stratégique</h3>
+                            <p>Basé sur des données réelles</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <h3>Précis</h3>
+                            <p>Analyse de +12k matchs</p>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="start-prediction" class="start-button">
+                    <i class="fas fa-play-circle"></i> Commencer les prédictions
+                </button>
+            </div>
+        </div>
+
+        <!-- Page 3: Prédiction -->
         <div id="prediction-page" class="page">
             <header>
                 <div class="header-container">
@@ -53,16 +123,23 @@
                         <i class="fas fa-futbol"></i>
                     </div>
                     <h1>FIFA 4x4 Predictor</h1>
+                    <button id="go-back" class="back-button">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
                 </div>
             </header>
 
             <div class="prediction-form">
+                <div class="form-title">
+                    <i class="fas fa-chart-pie"></i> Choisissez les équipes
+                </div>
+
                 <div class="teams-container">
                     <div class="team-select">
                         <label for="team1">Équipe 1</label>
                         <div class="custom-select">
                             <select id="team1" required>
-                                <option value="" disabled selected>Sélectionner l'équipe</option>
+                                <option value="" disabled selected>Sélectionner</option>
                                 <!-- Les équipes seront ajoutées dynamiquement -->
                             </select>
                             <div class="select-arrow">
@@ -77,7 +154,7 @@
                         <label for="team2">Équipe 2</label>
                         <div class="custom-select">
                             <select id="team2" required>
-                                <option value="" disabled selected>Sélectionner l'équipe</option>
+                                <option value="" disabled selected>Sélectionner</option>
                                 <!-- Les équipes seront ajoutées dynamiquement -->
                             </select>
                             <div class="select-arrow">
@@ -88,7 +165,9 @@
                 </div>
 
                 <div class="odds-container">
-                    <h3>Cotes <span class="optional">(optionnel)</span></h3>
+                    <div class="form-title">
+                        <i class="fas fa-coins"></i> Cotes <span class="optional">(optionnel)</span>
+                    </div>
                     <div class="odds-inputs">
                         <div class="odds-input">
                             <label for="odds1">Cote Équipe 1</label>

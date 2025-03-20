@@ -1,6 +1,6 @@
 // Initialisation de l'application
 document.addEventListener("DOMContentLoaded", function() {
-    // Initialiser l'API Telegram WebApp
+    // Initialiser l'API Telegram WebApp si disponible
     if (window.Telegram && window.Telegram.WebApp) {
         window.Telegram.WebApp.ready();
         console.log("Telegram WebApp initialisé avec succès");
@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", function() {
             document.documentElement.style.setProperty('--text-secondary', webAppData.themeParams.hint_color || '#666666');
         }
     } else {
-        console.warn("Telegram WebApp non disponible - l'application doit être ouverte depuis Telegram");
+        console.warn("Telegram WebApp non disponible - l'application peut avoir des fonctionnalités limitées");
     }
     
     // Initialiser les événements
@@ -28,16 +28,19 @@ document.addEventListener("DOMContentLoaded", function() {
 const config = {
     // ID de votre canal Telegram
     channelId: '@alvecapital1',
-    // Bot username pour les interactions directes
-    botUsername: 'FIFA4x4PredictorBot'
+    // Nom d'utilisateur de votre bot Telegram
+    botUsername: '@FIFA4x4PredictorBot'
 };
 
 // Initialisation des événements
 function initEvents() {
+    console.log("Initialisation des événements");
+    
     // Bouton de vérification d'abonnement
     const verifyBtn = document.getElementById('verify-subscription');
     if (verifyBtn) {
         verifyBtn.addEventListener('click', checkSubscription);
+        console.log("Événement attaché au bouton de vérification");
     }
     
     // Bouton pour continuer après vérification d'abonnement
@@ -46,6 +49,7 @@ function initEvents() {
         continueBtn.addEventListener('click', function() {
             showPage('game-intro');
         });
+        console.log("Événement attaché au bouton continuer");
     }
     
     // Bouton pour commencer les prédictions
@@ -54,6 +58,7 @@ function initEvents() {
         startBtn.addEventListener('click', function() {
             showPage('prediction-page');
         });
+        console.log("Événement attaché au bouton commencer");
     }
     
     // Bouton pour retourner à l'introduction
@@ -62,37 +67,65 @@ function initEvents() {
         backBtn.addEventListener('click', function() {
             showPage('game-intro');
         });
+        console.log("Événement attaché au bouton retour");
     }
     
     // Bouton de prédiction
     const predictBtn = document.getElementById('predict-button');
     if (predictBtn) {
         predictBtn.addEventListener('click', getPrediction);
+        console.log("Événement attaché au bouton prédiction");
     }
 }
 
-// Vérification d'abonnement au canal - Version simplifiée dirigeant vers le bot
+// Vérification d'abonnement au canal
 function checkSubscription() {
+    console.log("Début de vérification d'abonnement");
+    
     const loadingEl = document.getElementById('loading-verification');
     const verifyBtn = document.getElementById('verify-subscription');
     const continueBtn = document.getElementById('continue-to-app');
     const confirmationEl = document.getElementById('subscription-confirmed');
     
-    // Vérifier si l'utilisateur est abonné au canal
-    // Pour cette version simplifiée, nous affichons un message d'instruction
-    // L'utilisateur devra vérifier son abonnement en utilisant directement le bot Telegram
-    
-    alert(`Pour vérifier votre abonnement au canal ${config.channelId}, veuillez envoyer la commande /check à notre bot ${config.botUsername}.\n\nAprès avoir reçu confirmation, revenez ici et cliquez sur 'Continuer'.`);
-    
-    // Afficher le bouton pour continuer 
-    // L'utilisateur cliquera dessus après avoir vérifié avec le bot
-    confirmationEl.classList.add('show');
-    continueBtn.style.display = 'block';
+    // Afficher le chargement
+    loadingEl.style.display = 'flex';
     verifyBtn.style.display = 'none';
+    
+    // Dans une application réelle, vous devriez vérifier l'abonnement auprès de l'API Telegram.
+    // Puisque c'est compliqué à faire directement depuis le frontend, nous allons rediriger
+    // l'utilisateur vers le bot pour effectuer la vérification.
+    
+    setTimeout(function() {
+        // Masquer le chargement
+        loadingEl.style.display = 'none';
+        
+        // Afficher l'alerte avec les instructions
+        alert(`Pour vérifier votre abonnement au canal ${config.channelId}, veuillez envoyer la commande /check à notre bot ${config.botUsername}.\n\nAprès avoir reçu confirmation, revenez ici et cliquez sur "Continuer".`);
+        
+        // Afficher la confirmation et le bouton pour continuer
+        confirmationEl.classList.add('show');
+        continueBtn.style.display = 'block';
+        
+        // Animer la confirmation
+        try {
+            confirmationEl.animate([
+                { transform: 'scale(0.95)' },
+                { transform: 'scale(1.05)' },
+                { transform: 'scale(1)' }
+            ], {
+                duration: 600,
+                easing: 'ease-out'
+            });
+        } catch (error) {
+            console.warn("Animation non supportée par ce navigateur");
+        }
+    }, 1500);
 }
 
 // Changement de page
 function showPage(pageId) {
+    console.log(`Changement de page vers ${pageId}`);
+    
     // Masquer toutes les pages
     document.querySelectorAll('.page').forEach(page => {
         page.classList.remove('active');
@@ -105,11 +138,15 @@ function showPage(pageId) {
         
         // Faire défiler vers le haut
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        console.error(`Page ${pageId} introuvable`);
     }
 }
 
 // Chargement de la liste des équipes
 function loadTeamsList() {
+    console.log("Chargement de la liste des équipes");
+    
     // Liste d'équipes pour l'application
     const teams = [
         "Manchester United",
@@ -134,6 +171,7 @@ function loadTeamsList() {
         "Sheffield United"
     ].sort();
     
+    console.log(`${teams.length} équipes chargées`);
     populateTeamDropdowns(teams);
 }
 
@@ -159,11 +197,17 @@ function populateTeamDropdowns(teams) {
             option2.textContent = team;
             team2Select.appendChild(option2);
         });
+        
+        console.log("Listes déroulantes d'équipes remplies");
+    } else {
+        console.error("Les éléments select pour les équipes n'ont pas été trouvés");
     }
 }
 
 // Récupération des prédictions
 function getPrediction() {
+    console.log("Demande de prédiction");
+    
     const team1 = document.getElementById('team1').value;
     const team2 = document.getElementById('team2').value;
     const odds1 = document.getElementById('odds1').value;
@@ -180,6 +224,8 @@ function getPrediction() {
         return;
     }
     
+    console.log(`Prédiction pour ${team1} vs ${team2}`);
+    
     // Afficher le chargement
     const loadingEl = document.getElementById('loading-prediction');
     const resultsEl = document.getElementById('prediction-results');
@@ -190,16 +236,15 @@ function getPrediction() {
     // Faire défiler jusqu'au chargement
     loadingEl.scrollIntoView({ behavior: 'smooth' });
     
-    // Pour cette version simplifiée, nous générons des prédictions localement
-    // Au lieu d'appeler une API externe
-    
     // Simuler un délai de chargement
+    // Dans une application réelle, vous feriez une requête vers votre API
     setTimeout(() => {
         // Masquer le chargement
         loadingEl.style.display = 'none';
         
         // Générer des prédictions
         const prediction = generatePrediction(team1, team2, odds1, odds2);
+        console.log("Prédiction générée", prediction);
         
         // Afficher les résultats
         displayPrediction(prediction);
@@ -214,10 +259,10 @@ function getPrediction() {
 
 // Fonction pour générer des prédictions
 function generatePrediction(team1, team2, odds1, odds2) {
-    // Dans une version complète, cette fonction appelerait votre bot Telegram
-    // ou un service d'API pour des prédictions basées sur des données réelles
+    // Dans une version réelle, cette fonction appelerait votre API backend
+    // ou communiquerait avec votre bot Telegram pour obtenir les vraies prédictions.
     
-    // Pour cette version simplifiée, générer des prédictions aléatoires
+    // Pour cette version exemple, génération aléatoire
     return {
         teams: {
             team1: team1,
@@ -254,6 +299,8 @@ function generatePrediction(team1, team2, odds1, odds2) {
 
 // Affichage des prédictions
 function displayPrediction(prediction) {
+    console.log("Affichage des résultats de prédiction");
+    
     const resultsEl = document.getElementById('prediction-results');
     if (!resultsEl) return;
     

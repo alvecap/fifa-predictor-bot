@@ -1,7 +1,7 @@
 import logging
 import re
 from typing import Dict, List, Optional, Tuple, Any
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -44,6 +44,27 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text(
             "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
         )
+
+# Ajouter cette fonction pour gérer la commande /webapp
+async def webapp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ouvre la WebApp pour les prédictions FIFA 4x4"""
+    webapp_button = InlineKeyboardButton(
+        text="📊 Ouvrir l'application de prédiction",
+        web_app=WebAppInfo(url="https://verol333.github.io/fifa-predictor-webapp/")
+    )
+    
+    keyboard = InlineKeyboardMarkup([[webapp_button]])
+    
+    await update.message.reply_text(
+        "🔮 *FIFA 4x4 PREDICTOR - APPLICATION WEB*\n\n"
+        "Accédez à notre interface de prédiction avancée avec:\n"
+        "• Prédictions de scores précises\n"
+        "• Analyses statistiques détaillées\n"
+        "• Interface utilisateur intuitive\n\n"
+        "Cliquez sur le bouton ci-dessous pour commencer ⬇️",
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
 
 # Traitement des prédictions simples
 async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -217,7 +238,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         data_parts = query.data.split("_")
         if len(data_parts) >= 3:
             team1 = data_parts[1]
-            team2 = "_".join(data_parts[2:])  # Gérer les noms d'équipe avec des underscore
+            team2 = "_".join(data_parts[2:])  # Gérer les noms d'équipe avec des underscores
             
             # Afficher un message de chargement
             await query.edit_message_text("⏳ Analyse en cours, veuillez patienter...")
@@ -291,8 +312,8 @@ async def setup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 Ce bot utilise une base de données de matchs FIFA 4x4 pour générer des prédictions précises.
 
 *Fichiers nécessaires:*
-• `google_credentials.json` - Pour accéder à votre Google Sheets
-• `config.py` - Configuration du bot avec les tokens et paramètres
+- `google_credentials.json` - Pour accéder à votre Google Sheets
+- `config.py` - Configuration du bot avec les tokens et paramètres
 
 *Installation:*
 1. Assurez-vous que Python 3.7+ est installé
@@ -301,9 +322,9 @@ Ce bot utilise une base de données de matchs FIFA 4x4 pour générer des prédi
 
 *Hébergement:*
 Pour un fonctionnement continu, hébergez sur un serveur comme:
-• Heroku
-• PythonAnywhere
-• VPS personnel
+- Heroku
+- PythonAnywhere
+- VPS personnel
 
 *Pour plus d'informations, contactez l'administrateur du bot.*
 """
@@ -322,6 +343,7 @@ def main() -> None:
     application.add_handler(CommandHandler("odds", odds_command))
     application.add_handler(CommandHandler("teams", teams_command))
     application.add_handler(CommandHandler("setup", setup_command))
+    application.add_handler(CommandHandler("webapp", webapp_command))
     
     # Ajouter le gestionnaire pour les clics sur les boutons
     application.add_handler(CallbackQueryHandler(button_click))

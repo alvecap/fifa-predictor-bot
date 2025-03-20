@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // Initialiser les événements
     initEvents();
     
-    // Charger la liste des équipes (à implémenter)
+    // Charger la liste des équipes
     loadTeamsList();
 });
 
@@ -33,6 +33,22 @@ function initEvents() {
     const verifyBtn = document.getElementById('verify-subscription');
     if (verifyBtn) {
         verifyBtn.addEventListener('click', checkSubscription);
+    }
+    
+    // Bouton pour commencer les prédictions
+    const startBtn = document.getElementById('start-prediction');
+    if (startBtn) {
+        startBtn.addEventListener('click', function() {
+            showPage('prediction-page');
+        });
+    }
+    
+    // Bouton pour retourner à l'introduction
+    const backBtn = document.getElementById('go-back');
+    if (backBtn) {
+        backBtn.addEventListener('click', function() {
+            showPage('game-intro');
+        });
     }
     
     // Bouton de prédiction
@@ -59,8 +75,8 @@ function checkSubscription() {
         // Masquer le chargement
         loadingEl.style.display = 'none';
         
-        // Passer à la page principale
-        showPage('prediction-page');
+        // Passer à la page d'introduction
+        showPage('game-intro');
         
         // Dans une vraie implémentation, vous devriez avoir:
         /*
@@ -80,7 +96,7 @@ function checkSubscription() {
             
             if (data.isSubscribed) {
                 // Accès autorisé
-                showPage('prediction-page');
+                showPage('game-intro');
             } else {
                 // Accès refusé
                 verifyBtn.style.display = 'block';

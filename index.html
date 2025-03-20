@@ -4,198 +4,250 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FIFA 4x4 Predictor</title>
-    <link rel="stylesheet" href="styles.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --tg-color: #0088cc;
+            --tg-gradient: linear-gradient(to right, #0088cc, #33a9dc);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        
+        body {
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.5;
+        }
+        
+        .page {
+            display: none;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--tg-color);
+            border-radius: 50%;
+            color: white;
+            font-size: 40px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 22px;
+            font-weight: 600;
+        }
+        
+        p {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #555;
+        }
+        
+        .channel-name {
+            text-align: center;
+            margin: 15px 0;
+            font-weight: 700;
+            font-size: 20px;
+        }
+        
+        .benefits {
+            margin: 20px 0;
+        }
+        
+        .benefit {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .benefit i {
+            margin-right: 10px;
+            color: var(--tg-color);
+        }
+        
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border: none;
+            background: var(--tg-gradient);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 20px 0;
+            text-align: center;
+            text-decoration: none;
+        }
+        
+        .btn:active {
+            opacity: 0.8;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--tg-color);
+            color: var(--tg-color);
+        }
+        
+        .footer-text {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #777;
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 136, 204, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--tg-color);
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Page 1: Vérification d'abonnement -->
-        <div id="subscription-check" class="page active">
-            <div class="logo-container">
-                <div class="logo-circle pulse-animation">
+    <!-- Page 1: Vérification d'abonnement -->
+    <div id="subscription-check" class="page active">
+        <div class="logo">
+            <i class="fab fa-telegram"></i>
+        </div>
+        <h1>FIFA 4x4 Predictor</h1>
+        <h2>Accès Premium Requis</h2>
+        <p>Pour accéder à notre outil de prédiction avancé, vous devez être membre de notre canal Telegram officiel:</p>
+        
+        <div class="channel-name">
+            <i class="fas fa-crown"></i> ALVEC CAPITAL
+        </div>
+        
+        <div class="benefits">
+            <div class="benefit">
+                <i class="fas fa-check-circle"></i>
+                <span>Prédictions précises basées sur l'IA</span>
+            </div>
+            <div class="benefit">
+                <i class="fas fa-check-circle"></i>
+                <span>Analyses détaillées des matchs</span>
+            </div>
+            <div class="benefit">
+                <i class="fas fa-check-circle"></i>
+                <span>Recommandations en temps réel</span>
+            </div>
+        </div>
+        
+        <a href="https://t.me/alvecapital1" class="btn btn-outline">
+            <i class="fab fa-telegram"></i> Rejoindre le canal
+        </a>
+        
+        <button id="verify-subscription" class="btn">
+            Vérifier mon abonnement
+        </button>
+        
+        <div id="loading-verification" class="loading">
+            <div class="spinner"></div>
+            <p>Vérification en cours...</p>
+        </div>
+        
+        <p class="footer-text">
+            <i class="fas fa-lock"></i> Cet outil est exclusivement réservé aux membres
+        </p>
+    </div>
+
+    <!-- Page 2: Application principale -->
+    <div id="prediction-page" class="page">
+        <!-- Le contenu de cette page sera chargé après vérification -->
+    </div>
+
+    <script>
+        // Initialisation
+        document.addEventListener("DOMContentLoaded", function() {
+            // Initialiser l'API Telegram WebApp
+            window.Telegram.WebApp.ready();
+            
+            // Gestion du bouton de vérification
+            const verifyBtn = document.getElementById('verify-subscription');
+            if (verifyBtn) {
+                verifyBtn.addEventListener('click', function() {
+                    // Afficher le chargement
+                    document.getElementById('loading-verification').style.display = 'flex';
+                    verifyBtn.style.display = 'none';
+                    
+                    // Simulation de vérification (3 secondes)
+                    setTimeout(function() {
+                        // Masquer la page de vérification
+                        document.getElementById('subscription-check').classList.remove('active');
+                        
+                        // Rediriger vers la page principale (à implémenter)
+                        // Pour l'instant, juste un message
+                        document.getElementById('prediction-page').classList.add('active');
+                        document.getElementById('prediction-page').innerHTML = `
+                            <div class="logo">
+                                <i class="fas fa-futbol"></i>
+                            </div>
+                            <h1>FIFA 4x4 Predictor</h1>
+                            <p>Félicitations! Votre abonnement a été vérifié.</p>
+                            <p>Vous pouvez maintenant accéder à notre outil de prédiction.</p>
+                            <button class="btn" onclick="startApp()">
+                                Commencer
+                            </button>
+                        `;
+                    }, 3000);
+                });
+            }
+        });
+        
+        function startApp() {
+            // Ici vous pouvez charger l'application complète
+            document.getElementById('prediction-page').innerHTML = `
+                <div class="logo">
                     <i class="fas fa-futbol"></i>
                 </div>
                 <h1>FIFA 4x4 Predictor</h1>
-            </div>
-            
-            <div class="subscription-card">
-                <div class="telegram-icon">
-                    <i class="fab fa-telegram"></i>
-                </div>
-                <h2>Accès Premium Requis</h2>
-                <div class="description">
-                    <p>Pour accéder à notre outil de prédiction avancé, vous devez être membre de notre canal Telegram officiel:</p>
-                    <div class="channel-name">
-                        <i class="fas fa-crown"></i> ALVEC CAPITAL
-                    </div>
-                </div>
-                
-                <div class="benefits">
-                    <div class="benefit-item">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Prédictions précises basées sur l'IA</span>
-                    </div>
-                    <div class="benefit-item">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Analyses détaillées des matchs</span>
-                    </div>
-                    <div class="benefit-item">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Recommandations en temps réel</span>
-                    </div>
-                </div>
-                
-                <a href="https://t.me/alvecapital1" class="channel-link" target="_blank">
-                    <i class="fas fa-external-link-alt"></i> Rejoindre le canal maintenant
-                </a>
-                
-                <button id="verify-subscription" class="verify-button">
-                    <i class="fas fa-shield-check"></i> Vérifier mon abonnement
-                </button>
-                
-                <div id="loading-verification" class="loading-container" style="display: none;">
-                    <div class="loading-spinner"></div>
-                    <p>Vérification en cours...</p>
-                </div>
-                
-                <div class="lock-message">
-                    <i class="fas fa-lock"></i> Cet outil est exclusivement réservé aux membres
-                </div>
-            </div>
-        </div>
-
-        <!-- Page 2: Introduction au jeu -->
-        <div id="game-intro" class="page">
-            <div class="intro-header">
-                <div class="header-container">
-                    <div class="logo-small">
-                        <i class="fas fa-futbol"></i>
-                    </div>
-                    <h1>FIFA 4x4 Predictor</h1>
-                </div>
-            </div>
-
-            <div class="intro-card">
-                <h2>Bienvenue dans le monde du FIFA 4x4</h2>
-                <div class="game-description">
-                    <p>FIFA 4x4 est un jeu virtuel de football qui simule des matchs entre les meilleures équipes du monde.</p>
-                    
-                    <div class="feature-grid">
-                        <div class="feature">
-                            <div class="feature-icon">
-                                <i class="fas fa-bolt"></i>
-                            </div>
-                            <h3>Rapide</h3>
-                            <p>Matchs de 5 minutes</p>
-                        </div>
-                        <div class="feature">
-                            <div class="feature-icon">
-                                <i class="fas fa-chart-line"></i>
-                            </div>
-                            <h3>Stratégique</h3>
-                            <p>Basé sur des données réelles</p>
-                        </div>
-                        <div class="feature">
-                            <div class="feature-icon">
-                                <i class="fas fa-database"></i>
-                            </div>
-                            <h3>Précis</h3>
-                            <p>Analyse de +12k matchs</p>
-                        </div>
-                    </div>
-                </div>
-
-                <button id="start-prediction" class="start-button">
-                    <i class="fas fa-play-circle"></i> Commencer les prédictions
-                </button>
-            </div>
-        </div>
-
-        <!-- Page 3: Prédiction -->
-        <div id="prediction-page" class="page">
-            <header>
-                <div class="header-container">
-                    <div class="logo-small">
-                        <i class="fas fa-futbol"></i>
-                    </div>
-                    <h1>FIFA 4x4 Predictor</h1>
-                    <button id="go-back" class="back-button">
-                        <i class="fas fa-arrow-left"></i>
-                    </button>
-                </div>
-            </header>
-
-            <div class="prediction-form">
-                <div class="form-title">
-                    <i class="fas fa-chart-pie"></i> Choisissez les équipes
-                </div>
-
-                <div class="teams-container">
-                    <div class="team-select">
-                        <label for="team1">Équipe 1</label>
-                        <div class="custom-select">
-                            <select id="team1" required>
-                                <option value="" disabled selected>Sélectionner</option>
-                                <!-- Les équipes seront ajoutées dynamiquement -->
-                            </select>
-                            <div class="select-arrow">
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="versus">VS</div>
-
-                    <div class="team-select">
-                        <label for="team2">Équipe 2</label>
-                        <div class="custom-select">
-                            <select id="team2" required>
-                                <option value="" disabled selected>Sélectionner</option>
-                                <!-- Les équipes seront ajoutées dynamiquement -->
-                            </select>
-                            <div class="select-arrow">
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="odds-container">
-                    <div class="form-title">
-                        <i class="fas fa-coins"></i> Cotes <span class="optional">(optionnel)</span>
-                    </div>
-                    <div class="odds-inputs">
-                        <div class="odds-input">
-                            <label for="odds1">Cote Équipe 1</label>
-                            <input type="number" id="odds1" min="1.01" step="0.01" placeholder="Ex: 1.85">
-                        </div>
-                        <div class="odds-input">
-                            <label for="odds2">Cote Équipe 2</label>
-                            <input type="number" id="odds2" min="1.01" step="0.01" placeholder="Ex: 2.10">
-                        </div>
-                    </div>
-                </div>
-
-                <button id="predict-button" class="predict-button">
-                    <i class="fas fa-chart-line"></i> Obtenir la prédiction
-                </button>
-            </div>
-
-            <div id="loading-prediction" class="loading-container" style="display: none;">
-                <div class="loading-spinner"></div>
-                <p>Analyse des données en cours...</p>
-            </div>
-
-            <div id="prediction-results" class="prediction-results" style="display: none;">
-                <!-- Les résultats seront ajoutés dynamiquement -->
-            </div>
-        </div>
-    </div>
-
-    <script src="app.js"></script>
+                <p>Application en cours de développement...</p>
+            `;
+        }
+    </script>
 </body>
 </html>

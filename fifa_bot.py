@@ -49,9 +49,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def webapp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Ouvre la WebApp pour les prédictions FIFA 4x4"""
     webapp_button = InlineKeyboardButton(
-        text="📊 Ouvrir l'application de prédiction",
-        web_app=WebAppInfo(url="https://verol333.github.io/fifa-predictor-webapp/")
-    )
+    text="📊 Ouvrir l'application de prédiction",
+    web_app=WebAppInfo(url="https://verol333.github.io/fifa-predictor-bot/")
+)
     
     keyboard = InlineKeyboardMarkup([[webapp_button]])
     

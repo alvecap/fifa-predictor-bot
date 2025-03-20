@@ -1,366 +1,865 @@
-// Initialisation de l'application
-document.addEventListener("DOMContentLoaded", function() {
-    // Initialiser l'API Telegram WebApp
-    window.Telegram.WebApp.ready();
-    
-    // Changer les couleurs pour correspondre au thème Telegram
-    const webAppData = window.Telegram.WebApp;
-    if (webAppData.themeParams) {
-        document.documentElement.style.setProperty('--background-color', webAppData.themeParams.bg_color || '#f7f9fb');
-        document.documentElement.style.setProperty('--card-color', webAppData.themeParams.secondary_bg_color || '#ffffff');
-        document.documentElement.style.setProperty('--text-color', webAppData.themeParams.text_color || '#333333');
-        document.documentElement.style.setProperty('--text-secondary', webAppData.themeParams.hint_color || '#666666');
-    }
-    
-    // Initialiser les événements
-    initEvents();
-    
-    // Charger la liste des équipes (à implémenter)
-    loadTeamsList();
-});
-
-// Configuration
-const config = {
-    // Remplacer par votre ID de canal Telegram réel
-    channelId: '@votre_canal_principal',
-    // URL de votre API
-    apiBaseUrl: 'https://votre-serveur-api.com/api'
-};
-
-// Initialisation des événements
-function initEvents() {
-    // Bouton de vérification d'abonnement
-    const verifyBtn = document.getElementById('verify-subscription');
-    if (verifyBtn) {
-        verifyBtn.addEventListener('click', checkSubscription);
-    }
-    
-    // Bouton de prédiction
-    const predictBtn = document.getElementById('predict-button');
-    if (predictBtn) {
-        predictBtn.addEventListener('click', getPrediction);
-    }
-}
-
-// Vérification d'abonnement au canal
-function checkSubscription() {
-    const loadingEl = document.getElementById('loading-verification');
-    const verifyBtn = document.getElementById('verify-subscription');
-    
-    // Afficher le chargement
-    loadingEl.style.display = 'flex';
-    verifyBtn.style.display = 'none';
-    
-    // Simuler une vérification (dans une vraie implémentation, appeler une API)
-    setTimeout(() => {
-        // Normalement, vous devriez appeler une API pour vérifier l'abonnement
-        // Pour la démo, nous simulons une vérification réussie
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FIFA 4x4 Predictor</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --tg-color: #0088cc;
+            --tg-gradient: linear-gradient(135deg, #0088cc, #33a9dc);
+            --premium-gold: #ffd700;
+            --premium-gradient: linear-gradient(135deg, #b8860b, #ffd700);
+            --predictor-color: #FF6B6B;
+            --accent-green: #4CAF50;
+            --accent-blue: #2196F3;
+        }
         
-        // Masquer le chargement
-        loadingEl.style.display = 'none';
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
         
-        // Passer à la page principale
-        showPage('prediction-page');
+        body {
+            background-color: #f0f2f5;
+            color: #333;
+            line-height: 1.5;
+            text-align: center;
+        }
         
-        // Dans une vraie implémentation, vous devriez avoir:
-        /*
-        fetch(`${config.apiBaseUrl}/check-subscription`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                userId: window.Telegram.WebApp.initDataUnsafe.user.id,
-                channelId: config.channelId
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            loadingEl.style.display = 'none';
+        .page {
+            display: none;
+            padding: 20px;
+            max-width: 100%;
+            width: 100%;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        .logo-container {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-top: 20px;
+        }
+        
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--tg-gradient);
+            border-radius: 50%;
+            color: white;
+            font-size: 36px;
+            box-shadow: 0 4px 20px rgba(0, 136, 204, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .logo:after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -50%;
+            width: 200%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            transform: rotate(45deg);
+        }
+        
+        .main-title {
+            text-align: center;
+            margin-bottom: 15px;
+            width: 100%;
+            font-size: 30px;
+            font-weight: 800;
+            color: #333;
+        }
+        
+        .main-title span {
+            color: var(--predictor-color);
+            text-shadow: 0 1px 2px rgba(255, 107, 107, 0.2);
+        }
+        
+        .subtitle {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 22px;
+            font-weight: 700;
+            color: #444;
+            width: 100%;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 25px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+        }
+        
+        .text {
+            font-size: 16px;
+            line-height: 1.5;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        
+        .channel-name {
+            display: inline-block;
+            padding: 8px 20px;
+            background: var(--premium-gradient);
+            color: #333;
+            font-weight: 800;
+            font-size: 22px;
+            border-radius: 50px;
+            margin: 5px 0 15px;
+            text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 15px rgba(184, 134, 11, 0.3);
+        }
+        
+        .channel-name i {
+            margin-right: 8px;
+        }
+        
+        .benefits {
+            margin: 15px 0;
+        }
+        
+        .benefit {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .benefit:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .benefit-icon {
+            flex-shrink: 0;
+            width: 28px;
+            height: 28px;
+            background-color: #e3f2fd;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            color: var(--tg-color);
+        }
+        
+        .benefit-text {
+            font-size: 15px;
+            color: #444;
+            font-weight: 500;
+            text-align: left;
+        }
+        
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            border: none;
+            background: var(--tg-gradient);
+            color: white;
+            font-size: 17px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            margin: 15px 0;
+            text-align: center;
+            text-decoration: none;
+            box-shadow: 0 4px 15px rgba(0, 136, 204, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 136, 204, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 10px rgba(0, 136, 204, 0.2);
+        }
+        
+        .btn-outline {
+            background: white;
+            border: 2px solid var(--tg-color);
+            color: var(--tg-color);
+        }
+        
+        .btn-outline:hover {
+            background: #f0f8ff;
+        }
+        
+        .footer-text {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #777;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .footer-text i {
+            margin-right: 8px;
+            color: #888;
+        }
+        
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 25px 0;
+            display: none;
+        }
+        
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(0, 136, 204, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--tg-color);
+            animation: spin 1.2s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Form elements */
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #444;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: var(--tg-color);
+            box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.2);
+            outline: none;
+        }
+        
+        .helper-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .team-inputs {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .team-input {
+            flex: 1;
+        }
+        
+        .vs-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--tg-color);
+        }
+        
+        /* Animation 3D */
+        .analysis-container {
+            perspective: 1000px;
+            height: 200px;
+            display: none;
+            position: relative;
+            margin: 30px 0;
+        }
+        
+        .cube {
+            width: 80px;
+            height: 80px;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            transform-style: preserve-3d;
+            animation: rotate 4s infinite linear;
+        }
+        
+        .cube-face {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: rgba(0, 136, 204, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(0, 136, 204, 0.5);
+        }
+        
+        .cube-face:nth-child(1) { transform: translateZ(40px); }
+        .cube-face:nth-child(2) { transform: rotateY(90deg) translateZ(40px); }
+        .cube-face:nth-child(3) { transform: rotateY(180deg) translateZ(40px); }
+        .cube-face:nth-child(4) { transform: rotateY(-90deg) translateZ(40px); }
+        .cube-face:nth-child(5) { transform: rotateX(90deg) translateZ(40px); }
+        .cube-face:nth-child(6) { transform: rotateX(-90deg) translateZ(40px); }
+        
+        @keyframes rotate {
+            0% { transform: translate(-50%, -50%) rotateX(0) rotateY(0); }
+            100% { transform: translate(-50%, -50%) rotateX(360deg) rotateY(360deg); }
+        }
+        
+        .analysis-text {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 16px;
+            color: var(--tg-color);
+            font-weight: 600;
+        }
+        
+        /* Results styling */
+        .results-section {
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #444;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .section-title i {
+            margin-right: 10px;
+            color: var(--tg-color);
+        }
+        
+        .prediction-box {
+            background: #f5f7fa;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 15px;
+            position: relative;
+            border-left: 4px solid var(--tg-color);
+        }
+        
+        .prediction-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #444;
+            font-size: 16px;
+        }
+        
+        .score-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+        
+        .score-item {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.2s;
+        }
+        
+        .score-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .score-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--predictor-color);
+        }
+        
+        .score-confidence {
+            font-size: 14px;
+            color: #777;
+            margin-top: 5px;
+        }
+        
+        .stats-container {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        
+        .stat-box {
+            flex: 1;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            margin: 0 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        
+        .stat-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--tg-color);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #777;
+        }
+        
+        .winner-box {
+            background: linear-gradient(to right, #f0f9ff, #e6f7ff);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: left;
+            border-left: 4px solid var(--accent-blue);
+        }
+        
+        .winner-box p {
+            color: #444;
+            margin-bottom: 5px;
+        }
+        
+        .winner-team {
+            font-weight: 700;
+            color: var(--accent-blue);
+        }
+        
+        /* Recap styling */
+        .recap-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .recap-item:last-child {
+            border-bottom: none;
+        }
+        
+        .recap-label {
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .recap-value {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <!-- Page 1: Vérification d'abonnement -->
+    <div id="subscription-check" class="page active">
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fab fa-telegram"></i>
+            </div>
+        </div>
+        
+        <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
+        <h2 class="subtitle">Accès Premium Requis</h2>
+        
+        <div class="card">
+            <p class="text">Pour accéder à notre outil de prédiction avancé, vous devez être membre de notre canal Telegram officiel:</p>
             
-            if (data.isSubscribed) {
-                // Accès autorisé
-                showPage('prediction-page');
-            } else {
-                // Accès refusé
-                verifyBtn.style.display = 'block';
-                alert('Vous devez être abonné au canal pour utiliser cette application.');
-            }
-        })
-        .catch(error => {
-            console.error('Erreur de vérification:', error);
-            loadingEl.style.display = 'none';
-            verifyBtn.style.display = 'block';
-            alert('Une erreur est survenue. Veuillez réessayer.');
-        });
-        */
-    }, 3000); // Simulation de 3 secondes
-}
-
-// Changement de page
-function showPage(pageId) {
-    // Masquer toutes les pages
-    document.querySelectorAll('.page').forEach(page => {
-        page.classList.remove('active');
-    });
-    
-    // Afficher la page demandée
-    const targetPage = document.getElementById(pageId);
-    if (targetPage) {
-        targetPage.classList.add('active');
-    }
-}
-
-// Chargement de la liste des équipes
-function loadTeamsList() {
-    // Liste d'équipes à titre d'exemple
-    // Dans une vraie implémentation, vous chargerez ces données depuis votre API
-    const teams = [
-        "Manchester United",
-        "Chelsea",
-        "Arsenal",
-        "Liverpool",
-        "Manchester City",
-        "Tottenham",
-        "Aston Villa",
-        "Newcastle United",
-        "West Ham United",
-        "Brighton",
-        "Bournemouth",
-        "Everton",
-        "Crystal Palace",
-        "Brentford",
-        "Fulham",
-        "Wolverhampton",
-        "Nottingham Forest",
-        "Luton Town",
-        "Burnley",
-        "Sheffield United"
-    ].sort();
-    
-    // Remplir les listes déroulantes
-    const team1Select = document.getElementById('team1');
-    const team2Select = document.getElementById('team2');
-    
-    if (team1Select && team2Select) {
-        teams.forEach(team => {
-            const option1 = document.createElement('option');
-            option1.value = team;
-            option1.textContent = team;
-            team1Select.appendChild(option1);
+            <div class="channel-name">
+                <i class="fas fa-crown"></i> AL VE CAPITAL
+            </div>
             
-            const option2 = document.createElement('option');
-            option2.value = team;
-            option2.textContent = team;
-            team2Select.appendChild(option2);
-        });
-    }
-}
-
-// Récupération des prédictions
-function getPrediction() {
-    const team1 = document.getElementById('team1').value;
-    const team2 = document.getElementById('team2').value;
-    const odds1 = document.getElementById('odds1').value;
-    const odds2 = document.getElementById('odds2').value;
-    
-    // Validation
-    if (!team1 || !team2) {
-        alert('Veuillez sélectionner les deux équipes.');
-        return;
-    }
-    
-    if (team1 === team2) {
-        alert('Veuillez sélectionner deux équipes différentes.');
-        return;
-    }
-    
-    // Afficher le chargement
-    const loadingEl = document.getElementById('loading-prediction');
-    const resultsEl = document.getElementById('prediction-results');
-    
-    loadingEl.style.display = 'flex';
-    resultsEl.style.display = 'none';
-    
-    // Faire défiler jusqu'au chargement
-    loadingEl.scrollIntoView({ behavior: 'smooth' });
-    
-    // Dans une vraie implémentation, appeler votre API de prédiction
-    // Pour la démo, nous simulons une réponse
-    setTimeout(() => {
-        // Masquer le chargement
-        loadingEl.style.display = 'none';
-        
-        // Générer de fausses prédictions pour la démo
-        const prediction = generateMockPrediction(team1, team2, odds1, odds2);
-        
-        // Afficher les résultats
-        displayPrediction(prediction);
-        
-        // Afficher le conteneur de résultats
-        resultsEl.style.display = 'block';
-        
-        // Faire défiler jusqu'aux résultats
-        resultsEl.scrollIntoView({ behavior: 'smooth' });
-    }, 3500); // Simulation de 3.5 secondes
-}
-
-// Génération de prédictions simulées pour la démo
-function generateMockPrediction(team1, team2, odds1, odds2) {
-    // Ces données seraient normalement obtenues depuis votre API
-    return {
-        teams: {
-            team1: team1,
-            team2: team2
-        },
-        odds: {
-            team1: odds1 || null,
-            team2: odds2 || null
-        },
-        direct_matches: Math.floor(Math.random() * 50) + 10,
-        half_time_scores: [
-            { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 30) + 60 },
-            { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 20) + 50 },
-            { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 2), confidence: Math.floor(Math.random() * 20) + 40 }
-        ],
-        full_time_scores: [
-            { score: Math.floor(Math.random() * 5) + ":" + Math.floor(Math.random() * 5), confidence: Math.floor(Math.random() * 30) + 60 },
-            { score: Math.floor(Math.random() * 5) + ":" + Math.floor(Math.random() * 5), confidence: Math.floor(Math.random() * 20) + 50 },
-            { score: Math.floor(Math.random() * 4) + ":" + Math.floor(Math.random() * 4), confidence: Math.floor(Math.random() * 20) + 40 }
-        ],
-        winner_half_time: {
-            team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Nul"),
-            probability: Math.floor(Math.random() * 30) + 60
-        },
-        winner_full_time: {
-            team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Nul"),
-            probability: Math.floor(Math.random() * 30) + 60
-        },
-        avg_goals_half_time: (Math.random() * 3 + 1).toFixed(1),
-        avg_goals_full_time: (Math.random() * 5 + 2).toFixed(1),
-        confidence_level: Math.floor(Math.random() * 30) + 60
-    };
-}
-
-// Affichage des prédictions
-function displayPrediction(prediction) {
-    const resultsEl = document.getElementById('prediction-results');
-    if (!resultsEl) return;
-    
-    // Construire le HTML des résultats
-    let html = `
-        <div class="prediction-header">
-            <div class="teams-title">${prediction.teams.team1} vs ${prediction.teams.team2}</div>
-            <div class="confidence-badge">Confiance: ${prediction.confidence_level}%</div>
-        </div>
-        
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-clock"></i> Scores prévus (1ère mi-temps)
-            </div>
-            <ul class="score-list">
-    `;
-    
-    // Ajouter les scores mi-temps
-    prediction.half_time_scores.forEach(score => {
-        html += `
-            <li class="score-item">
-                <span class="score-value">${score.score}</span>
-                <span class="score-confidence">${score.confidence}%</span>
-            </li>
-        `;
-    });
-    
-    // Ajouter le gagnant mi-temps
-    html += `
-            </ul>
-            <div class="winner-box">
-                <p>Prédiction mi-temps: <span class="winner-team">${prediction.winner_half_time.team === "Nul" ? "Match nul" : prediction.winner_half_time.team}</span> (${prediction.winner_half_time.probability}%)</p>
-            </div>
-        </div>
-        
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-futbol"></i> Scores prévus (temps réglementaire)
-            </div>
-            <ul class="score-list">
-    `;
-    
-    // Ajouter les scores temps réglementaire
-    prediction.full_time_scores.forEach(score => {
-        html += `
-            <li class="score-item">
-                <span class="score-value">${score.score}</span>
-                <span class="score-confidence">${score.confidence}%</span>
-            </li>
-        `;
-    });
-    
-    // Ajouter le gagnant temps réglementaire
-    html += `
-            </ul>
-            <div class="winner-box">
-                <p>Prédiction finale: <span class="winner-team">${prediction.winner_full_time.team === "Nul" ? "Match nul" : prediction.winner_full_time.team}</span> (${prediction.winner_full_time.probability}%)</p>
-            </div>
-        </div>
-        
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-chart-bar"></i> Statistiques moyennes
-            </div>
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value">${prediction.avg_goals_half_time}</div>
-                    <div class="stat-label">Buts 1ère mi-temps</div>
+            <div class="benefits">
+                <div class="benefit">
+                    <div class="benefit-icon">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <span class="benefit-text">Prédictions précises basées sur l'IA</span>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-value">${prediction.avg_goals_full_time}</div>
-                    <div class="stat-label">Buts temps réglementaire</div>
+                <div class="benefit">
+                    <div class="benefit-icon">
+                        <i class="fas fa-chart-bar"></i>
+                    </div>
+                    <span class="benefit-text">Analyses détaillées des matchs</span>
+                </div>
+                <div class="benefit">
+                    <div class="benefit-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <span class="benefit-text">Recommandations en temps réel</span>
                 </div>
             </div>
         </div>
-    `;
-    
-    // Ajouter les cotes si disponibles
-    if (prediction.odds.team1 && prediction.odds.team2) {
-        html += `
-            <div class="prediction-section">
+        
+        <a href="https://t.me/alvecapital1" class="btn btn-outline">
+            <i class="fab fa-telegram"></i> Rejoindre le canal
+        </a>
+        
+        <button id="verify-subscription" class="btn">
+            Vérifier mon abonnement
+        </button>
+        
+        <div id="loading-verification" class="loading">
+            <div class="spinner"></div>
+            <p>Vérification en cours...</p>
+        </div>
+        
+        <div class="footer-text">
+            <i class="fas fa-lock"></i> Cet outil est exclusivement réservé aux membres
+        </div>
+    </div>
+
+    <!-- Page 2: Description et introduction -->
+    <div id="intro-page" class="page">
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fas fa-futbol"></i>
+            </div>
+        </div>
+        
+        <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
+        
+        <div class="card">
+            <h2 class="subtitle">Bienvenue dans le monde du FIFA 4x4</h2>
+            <p class="text">FIFA 4x4 est un jeu virtuel de football qui simule des matchs entre les meilleures équipes du monde.</p>
+            <p class="text">Notre système utilise une intelligence artificielle avancée qui analyse des milliers de paramètres et de statistiques de matchs pour générer des prédictions précises.</p>
+            <p class="text">Profitez de notre outil de prédiction pour obtenir un avantage compétitif sur vos paris!</p>
+        </div>
+        
+        <button id="start-prediction" class="btn">
+            Commencer
+        </button>
+    </div>
+
+    <!-- Page 3: Sélection des équipes -->
+    <div id="teams-page" class="page">
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fas fa-users"></i>
+            </div>
+        </div>
+        
+        <h1 class="main-title">Sélectionner les <span>équipes</span></h1>
+        
+        <div class="card">
+            <p class="text">Veuillez entrer les noms des deux équipes qui s'affrontent.</p>
+            
+            <div class="team-inputs">
+                <div class="team-input">
+                    <div class="form-group">
+                        <label for="team1">Équipe 1</label>
+                        <input type="text" id="team1" class="form-control" placeholder="ex: Manchester United">
+                    </div>
+                </div>
+                
+                <div class="vs-badge">VS</div>
+                
+                <div class="team-input">
+                    <div class="form-group">
+                        <label for="team2">Équipe 2</label>
+                        <input type="text" id="team2" class="form-control" placeholder="ex: Chelsea">
+                    </div>
+                </div>
+            </div>
+            
+            <p class="helper-text">* Veuillez entrer les noms exacts des équipes pour obtenir les meilleures prédictions.</p>
+        </div>
+        
+        <button id="next-to-odds" class="btn">
+            Suivant
+        </button>
+    </div>
+
+    <!-- Page 4: Entrée des cotes -->
+    <div id="odds-page" class="page">
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fas fa-percentage"></i>
+            </div>
+        </div>
+        
+        <h1 class="main-title">Entrer les <span>cotes</span></h1>
+        
+        <div class="card">
+            <p class="text">Veuillez entrer les cotes actuelles des bookmakers pour ce match.</p>
+            
+            <div class="team-inputs">
+                <div class="team-input">
+                    <div class="form-group">
+                        <label for="odds1" id="team1-label">Cote Équipe 1</label>
+                        <input type="number" id="odds1" class="form-control" step="0.01" min="1.01" placeholder="ex: 1.85">
+                    </div>
+                </div>
+                
+                <div class="vs-badge"></div>
+                
+                <div class="team-input">
+                    <div class="form-group">
+                        <label for="odds2" id="team2-label">Cote Équipe 2</label>
+                        <input type="number" id="odds2" class="form-control" step="0.01" min="1.01" placeholder="ex: 2.25">
+                    </div>
+                </div>
+            </div>
+            
+            <p class="helper-text">* Utilisez les cotes réelles fournies par Melbet, Mega Paris ou 1xBet pour une meilleure précision.</p>
+        </div>
+        
+        <button id="next-to-recap" class="btn">
+            Suivant
+        </button>
+    </div>
+
+    <!-- Page 5: Récapitulatif -->
+    <div id="recap-page" class="page">
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fas fa-clipboard-check"></i>
+            </div>
+        </div>
+        
+        <h1 class="main-title">Vérifier les <span>informations</span></h1>
+        
+        <div class="card">
+            <p class="text">Veuillez vérifier que les informations suivantes sont correctes avant de continuer.</p>
+            
+            <div class="recap-item">
+                <div class="recap-label">Équipe 1:</div>
+                <div class="recap-value" id="recap-team1">-</div>
+            </div>
+            
+            <div class="recap-item">
+                <div class="recap-label">Équipe 2:</div>
+                <div class="recap-value" id="recap-team2">-</div>
+            </div>
+            
+            <div class="recap-item">
+                <div class="recap-label">Cote Équipe 1:</div>
+                <div class="recap-value" id="recap-odds1">-</div>
+            </div>
+            
+            <div class="recap-item">
+                <div class="recap-label">Cote Équipe 2:</div>
+                <div class="recap-value" id="recap-odds2">-</div>
+            </div>
+        </div>
+        
+        <button id="get-prediction" class="btn">
+            Obtenir la prédiction
+        </button>
+    </div>
+
+    <!-- Page 6: Analyse en cours -->
+    <div id="analysis-page" class="page">
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fas fa-cogs"></i>
+            </div>
+        </div>
+        
+        <h1 class="main-title">Analyse en <span>cours</span></h1>
+        
+        <div class="card">
+            <p class="text">Notre intelligence artificielle analyse les données et génère votre prédiction personnalisée.</p>
+            
+            <div class="analysis-container" id="analysis-animation">
+                <div class="cube">
+                    <div class="cube-face"><i class="fas fa-chart-line"></i></div>
+                    <div class="cube-face"><i class="fas fa-database"></i></div>
+                    <div class="cube-face"><i class="fas fa-brain"></i></div>
+                    <div class="cube-face"><i class="fas fa-calculator"></i></div>
+                    <div class="cube-face"><i class="fas fa-futbol"></i></div>
+                    <div class="cube-face"><i class="fas fa-trophy"></i></div>
+                </div>
+                <div class="analysis-text">Calcul en cours...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 7: Résultats -->
+    <div id="results-page" class="page">
+        <div class="logo-container">
+            <div class="logo">
+                <i class="fas fa-chart-bar"></i>
+            </div>
+        </div>
+        
+        <h1 class="main-title">Vos <span>prédictions</span></h1>
+        
+        <div class="card">
+            <div class="results-section">
                 <div class="section-title">
-                    <i class="fas fa-coins"></i> Cotes
+                    <i class="fas fa-hourglass-half"></i> Scores 1ère mi-temps
                 </div>
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <div class="stat-value">${prediction.odds.team1}</div>
-                        <div class="stat-label">${prediction.teams.team1}</div>
+                
+                <div class="score-grid">
+                    <div class="score-item">
+                        <div class="score-value" id="half-score1">0:0</div>
+                        <div class="score-confidence">Confiance: 75%</div>
                     </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${prediction.odds.team2}</div>
-                        <div class="stat-label">${prediction.teams.team2}</div>
+                    <div class="score-item">
+                        <div class="score-value" id="half-score2">1:0</div>
+                        <div class="score-confidence">Confiance: 65%</div>
                     </div>
+                </div>
+                
+                <div class="winner-box">
+                    <p>Gagnant 1ère mi-temps: <span class="winner-team" id="half-winner">Manchester United</span></p>
+                    <p>Confiance: <span id="half-winner-confidence">70%</span></p>
                 </div>
             </div>
-        `;
-    }
-    
-    // Ajouter une information sur les confrontations directes
-    html += `
-        <div class="prediction-section">
-            <div class="section-title">
-                <i class="fas fa-handshake"></i> Confrontations
+            
+            <div class="results-section">
+                <div class="section-title">
+                    <i class="fas fa-futbol"></i> Scores temps réglementaire
+                </div>
+                
+                <div class="score-grid">
+                    <div class="score-item">
+                        <div class="score-value" id="full-score1">2:1</div>
+                        <div class="score-confidence">Confiance: 78%</div>
+                    </div>
+                    <div class="score-item">
+                        <div class="score-value" id="full-score2">2:0</div>
+                        <div class="score-confidence">Confiance: 68%</div>
+                    </div>
+                </div>
+                
+                <div class="winner-box">
+                    <p>Gagnant temps réglementaire: <span class="winner-team" id="full-winner">Manchester United</span></p>
+                    <p>Confiance: <span id="full-winner-confidence">75%</span></p>
+                </div>
             </div>
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <div class="stat-value">${prediction.direct_matches}</div>
-                    <div class="stat-label">Matchs analysés</div>
+            
+            <div class="results-section">
+                <div class="section-title">
+                    <i class="fas fa-bullseye"></i> Statistiques (99% de confiance)
+                </div>
+                
+                <div class="stats-container">
+                    <div class="stat-box">
+                        <div class="stat-value" id="over-half">1.5</div>
+                        <div class="stat-label">Buts 1ère mi-temps</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="over-full">2.5</div>
+                        <div class="stat-label">Buts temps réglementaire</div>
+                    </div>
                 </div>
             </div>
         </div>
-    `;
-    
-    // Insérer le HTML dans l'élément
-    resultsEl.innerHTML = html;
-}
-// Validation des cotes
+        
+        <button id="new-prediction" class="btn">
+            Nouvelle prédiction
+        </button>
+    </div>
+
+    <script>
+        let userTeam1 = '';
+        let userTeam2 = '';
+        let userOdds1 = '';
+        let userOdds2 = '';
+        
+        // Initialisation
+        document.addEventListener("DOMContentLoaded", function() {
+            // Initialiser l'API Telegram WebApp
+            window.Telegram.WebApp.ready();
+            
+            // Vérification d'abonnement
+            document.getElementById('verify-subscription').addEventListener('click', function() {
+                document.getElementById('loading-verification').style.display = 'flex';
+                this.style.display = 'none';
+                
+                // Simulation de vérification (3 secondes)
+                setTimeout(function() {
+                    showPage('intro-page');
+                }, 3000);
+            });
+            
+            // Navigation: Intro -> Teams
+            document.getElementById('start-prediction').addEventListener('click', function() {
+                showPage('teams-page');
+            });
+            
+            // Navigation: Teams -> Odds
+            document.getElementById('next-to-odds').addEventListener('click', function() {
+                userTeam1 = document.getElementById('team1').value.trim();
+                userTeam2 = document.getElementById('team2').value.trim();
+                
+                if (!userTeam1 || !userTeam2) {
+                    alert('Veuillez entrer les noms des deux équipes.');
+                    return;
+                }
+                
+                if (userTeam1 === userTeam2) {
+                    alert('Veuillez entrer deux équipes différentes.');
+                    return;
+                }
+                
+                // Mettre à jour les labels avec les noms des équipes
+                document.getElementById('team1-label').textContent = `Cote ${userTeam1}`;
+                document.getElementById('team2-label').textContent = `Cote ${userTeam2}`;
+                
+                showPage('odds-page');
+            });
+            
+            // Navigation: Odds -> Recap
+            document.getElementById('next-to-recap').addEventListener('click', function() {
+                userOdds1 = document.getElementById('odds1').value.trim();
+                userOdds2 = document.getElementById('odds2').value.trim();
+                
+                // Validation des cotes
                 if (userOdds1 && parseFloat(userOdds1) < 1.01) {
                     alert('La cote doit être supérieure à 1.01');
                     return;

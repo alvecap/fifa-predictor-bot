@@ -299,63 +299,6 @@
             color: var(--tg-color);
         }
         
-        /* Animation 3D */
-        .analysis-container {
-            perspective: 1000px;
-            height: 200px;
-            display: none;
-            position: relative;
-            margin: 30px 0;
-        }
-        
-        .cube {
-            width: 80px;
-            height: 80px;
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            transform-style: preserve-3d;
-            animation: rotate 4s infinite linear;
-        }
-        
-        .cube-face {
-            position: absolute;
-            width: 80px;
-            height: 80px;
-            background: rgba(0, 136, 204, 0.7);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 20px;
-            box-shadow: 0 0 20px rgba(0, 136, 204, 0.5);
-        }
-        
-        .cube-face:nth-child(1) { transform: translateZ(40px); }
-        .cube-face:nth-child(2) { transform: rotateY(90deg) translateZ(40px); }
-        .cube-face:nth-child(3) { transform: rotateY(180deg) translateZ(40px); }
-        .cube-face:nth-child(4) { transform: rotateY(-90deg) translateZ(40px); }
-        .cube-face:nth-child(5) { transform: rotateX(90deg) translateZ(40px); }
-        .cube-face:nth-child(6) { transform: rotateX(-90deg) translateZ(40px); }
-        
-        @keyframes rotate {
-            0% { transform: translate(-50%, -50%) rotateX(0) rotateY(0); }
-            100% { transform: translate(-50%, -50%) rotateX(360deg) rotateY(360deg); }
-        }
-        
-        .analysis-text {
-            position: absolute;
-            bottom: 20px;
-            left: 0;
-            right: 0;
-            text-align: center;
-            font-size: 16px;
-            color: var(--tg-color);
-            font-weight: 600;
-        }
-        
         /* Results styling */
         .results-section {
             margin-bottom: 25px;
@@ -480,27 +423,6 @@
             color: var(--accent-blue);
         }
         
-        /* Recap styling */
-        .recap-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .recap-item:last-child {
-            border-bottom: none;
-        }
-        
-        .recap-label {
-            font-weight: 600;
-            color: #555;
-        }
-        
-        .recap-value {
-            color: #333;
-        }
-
         /* Nouveaux styles pour la confirmation d'abonnement */
         .subscription-confirmed {
             display: none;
@@ -550,6 +472,26 @@
 
         .btn-success:hover {
             box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .team-inputs {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .vs-badge {
+                margin: 5px 0;
+            }
+            
+            .score-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stat-box {
+                margin: 5px 0;
+            }
         }
     </style>
 </head>

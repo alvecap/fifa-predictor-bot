@@ -45,7 +45,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
         )
 
-# Commande pour la vérification d'abonnement
+# Commande pour vérifier l'abonnement au canal
 async def check_subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Vérifie si l'utilisateur est abonné au canal @alvecapital1."""
     user_id = update.effective_user.id
@@ -82,12 +82,15 @@ async def check_subscription_command(update: Update, context: ContextTypes.DEFAU
             "Veuillez réessayer plus tard ou contacter le support."
         )
 
-# Ajouter cette fonction pour gérer la commande /webapp
+# WebApp command
 async def webapp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Ouvre la WebApp pour les prédictions FIFA 4x4"""
+    # URL de votre WebApp - remplacez par l'URL réelle après déploiement
+    webapp_url = "https://votre-username.github.io/fifa-predictor-bot/"
+    
     webapp_button = InlineKeyboardButton(
         text="📊 Ouvrir l'application de prédiction",
-        web_app=WebAppInfo(url="https://votre-webapp-url.com")  # Remplacez par l'URL de votre WebApp déployée
+        web_app=WebAppInfo(url=webapp_url)
     )
     
     keyboard = InlineKeyboardMarkup([[webapp_button]])
@@ -394,8 +397,9 @@ def main() -> None:
         application.add_error_handler(error_handler)
 
         # Démarrer le bot
-        logger.info("Bot démarré avec succès")
+        logger.info(f"Bot démarré avec le token: {TELEGRAM_TOKEN[:5]}...")
         application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
     except Exception as e:
         logger.critical(f"ERREUR CRITIQUE lors du démarrage du bot: {e}")
         import traceback

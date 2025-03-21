@@ -1,3 +1,6 @@
 python-telegram-bot>=13.7
 gspread
 oauth2client
+flask
+flask-cors
+gunicorn

@@ -17,6 +17,9 @@
             --accent-blue: #2196F3;
             --accent-orange: #FF9800;
             --dark-blue: #005a9e;
+            --light-blue: #e3f2fd;
+            --light-green: #e8f5e9;
+            --light-orange: #fff3e0;
         }
         
         * {
@@ -66,6 +69,19 @@
             box-shadow: 0 4px 20px rgba(0, 136, 204, 0.3);
             position: relative;
             overflow: hidden;
+            animation: pulse 3s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(0, 136, 204, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(0, 136, 204, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 136, 204, 0);
+            }
         }
         
         .logo:after {
@@ -104,6 +120,12 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(0, 0, 0, 0.04);
             overflow: hidden;
+            transform: translateY(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .premium-card:hover {
+            transform: translateY(-5px);
         }
 
         .channel-badge {
@@ -158,7 +180,7 @@
 
         .subscription-success {
             display: none;
-            background-color: #E8F5E9;
+            background-color: var(--light-green);
             padding: 15px;
             margin: 15px;
             border-radius: 8px;
@@ -172,7 +194,7 @@
         }
 
         .success-icon {
-            background-color: #4CAF50;
+            background-color: var(--accent-green);
             color: white;
             width: 32px;
             height: 32px;
@@ -242,16 +264,9 @@
             animation: pulse 2s infinite;
         }
 
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
-            }
-            70% {
-                box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
-            }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .loading-indicator {
@@ -308,13 +323,40 @@
             text-align: center;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
             border: 1px solid rgba(0, 0, 0, 0.04);
+            transform: translateY(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
         }
         
         .text {
             font-size: 16px;
-            line-height: 1.5;
+            line-height: 1.6;
             color: #555;
             margin-bottom: 15px;
+        }
+        
+        .highlight-text {
+            background-color: var(--light-blue);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            animation: fadeIn 1s ease-out;
+        }
+        
+        .emoji-text {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 15px;
+            color: #444;
+        }
+        
+        .emoji-icon {
+            font-size: 24px;
+            margin-right: 8px;
+            vertical-align: middle;
         }
         
         /* Team selection styles */
@@ -371,6 +413,10 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            height: 50px;
+            width: 50px;
+            background-color: var(--light-blue);
+            border-radius: 50%;
         }
 
         .helper-note {
@@ -380,7 +426,7 @@
             color: #666;
             margin-top: 15px;
             background-color: #f8f9fa;
-            padding: 10px;
+            padding: 12px;
             border-radius: 8px;
             border-left: 3px solid #ffc107;
         }
@@ -392,14 +438,14 @@
 
         /* Odds entry styles */
         .odds-selection-container {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 15px;
             margin: 25px 0;
         }
 
         .odds-input {
-            flex: 1;
+            width: 100%;
         }
 
         .odds-label {
@@ -532,6 +578,10 @@
             font-weight: 700;
             margin-bottom: 20px;
             color: #333;
+            padding: 10px 15px;
+            background-color: var(--light-blue);
+            border-radius: 10px;
+            display: inline-block;
         }
 
         .result-card {
@@ -540,6 +590,7 @@
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border-top: 4px solid var(--tg-color);
         }
         
         .card-header {
@@ -569,15 +620,29 @@
             color: var(--dark-blue);
         }
         
-        .scores-grid {
-            display: flex;
-            justify-content: space-between;
+        .prediction-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
             gap: 15px;
+        }
+        
+        .scores-container {
+            border-right: 1px solid #eee;
+            padding-right: 15px;
+        }
+        
+        .meta-container {
+            padding-left: 10px;
+        }
+        
+        .scores-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
             margin-bottom: 15px;
         }
         
         .score-box {
-            flex: 1;
             padding: 15px 10px;
             background-color: #f8f9fa;
             border-radius: 8px;
@@ -603,12 +668,29 @@
             color: #666;
         }
         
+        .prediction-section {
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .section-title i {
+            margin-right: 8px;
+            color: var(--accent-blue);
+        }
+        
         .winner-section {
-            background: linear-gradient(to right, #edf7ff, #e6f7ff);
+            background: var(--light-blue);
             border-radius: 8px;
             padding: 15px;
             text-align: center;
-            border-left: 4px solid var(--accent-blue);
             margin-top: 15px;
         }
         
@@ -631,11 +713,10 @@
         }
         
         .goals-section {
-            background-color: #fff8e1;
+            background-color: var(--light-orange);
             border-radius: 8px;
             padding: 15px;
             text-align: center;
-            border: 1px solid #ffe0b2;
             margin-top: 15px;
         }
         
@@ -649,6 +730,13 @@
             font-size: 28px;
             font-weight: 800;
             color: var(--accent-orange);
+        }
+        
+        .goals-suggestion {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #666;
+            font-style: italic;
         }
 
         /* Animation */
@@ -683,6 +771,25 @@
         .keyboard-dismiss-layer.active {
             display: block;
         }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .prediction-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .scores-container {
+                border-right: none;
+                padding-right: 0;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 15px;
+            }
+            
+            .meta-container {
+                padding-left: 0;
+                padding-top: 15px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -707,13 +814,13 @@
             <div class="feature-list">
                 <div class="feature-item">
                     <div class="feature-icon blue">
-                        <i class="fas fa-check"></i>
+                        <i class="fas fa-robot"></i>
                     </div>
                     <div class="feature-text">Prédictions précises basées sur l'IA</div>
                 </div>
                 <div class="feature-item">
                     <div class="feature-icon blue">
-                        <i class="fas fa-chart-bar"></i>
+                        <i class="fas fa-chart-line"></i>
                     </div>
                     <div class="feature-text">Analyses détaillées des matchs</div>
                 </div>
@@ -762,10 +869,17 @@
         <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
         
         <div class="card">
-            <h2 class="subtitle">Bienvenue dans le monde du FIFA 4x4</h2>
-            <p class="text">FIFA 4x4 est un jeu virtuel de football qui simule des matchs entre les meilleures équipes du monde.</p>
-            <p class="text">Notre système utilise une intelligence artificielle avancée qui analyse des milliers de paramètres et de statistiques de matchs pour générer des prédictions précises.</p>
-            <p class="text">Profitez de notre outil de prédiction pour obtenir un avantage compétitif sur vos paris!</p>
+            <h2 class="subtitle">🏆 Bienvenue dans l'univers FIFA 4x4</h2>
+            
+            <div class="highlight-text">
+                <p><span class="emoji-icon">🎮</span> FIFA 4x4 est un jeu virtuel de football qui simule des matchs entre les meilleures équipes du monde.</p>
+            </div>
+            
+            <p class="emoji-text"><span class="emoji-icon">🧠</span> Notre système d'intelligence artificielle analyse des milliers de paramètres de matchs pour générer des prédictions précises.</p>
+            
+            <p class="emoji-text"><span class="emoji-icon">📊</span> Accédez à des statistiques détaillées, des tendances historiques et des analyses de confrontations directes.</p>
+            
+            <p class="emoji-text"><span class="emoji-icon">🔮</span> Obtenez un avantage compétitif sur vos paris grâce à nos prédictions basées sur des données réelles!</p>
         </div>
         
         <button id="start-prediction" class="btn predict-btn">
@@ -907,34 +1021,33 @@
                 <div class="card-icon">
                     <i class="fas fa-hourglass-half"></i>
                 </div>
-                <div class="card-title">Scores prévus 1ère mi-temps</div>
+                <div class="card-title">Prédictions 1ère mi-temps</div>
             </div>
             
-            <div class="scores-grid" id="half-time-scores">
-                <div class="score-box">
-                    <div class="score-result">1:0</div>
-                    <div class="score-confidence">Confiance: 60%</div>
+            <div class="prediction-content">
+                <div class="scores-container">
+                    <div class="section-title">
+                        <i class="fas fa-futbol"></i> Scores probables
+                    </div>
+                    <div class="scores-grid" id="half-time-scores">
+                        <!-- Les scores seront ajoutés ici dynamiquement -->
+                    </div>
                 </div>
-                <div class="score-box">
-                    <div class="score-result">1:0</div>
-                    <div class="score-confidence">Confiance: 60%</div>
-                </div>
-                <div class="score-box">
-                    <div class="score-result">1:1</div>
-                    <div class="score-confidence">Confiance: 53%</div>
-                </div>
-            </div>
-            
-            <div class="winner-section">
-                <div class="winner-label">Vainqueur 1ère mi-temps</div>
-                <div class="winner-team" id="half-time-winner">Équipe A</div>
-                <div class="winner-probability">Probabilité: <span id="half-time-probability">64%</span></div>
-            </div>
-            
-            <div class="goals-section">
-                <div class="goals-label">Nombre de buts 1ère mi-temps</div>
-                <div class="goals-value">
-                    <span id="half-time-goals">2.5</span>
+                
+                <div class="meta-container">
+                    <div class="winner-section">
+                        <div class="winner-label">Vainqueur mi-temps</div>
+                        <div class="winner-team" id="half-time-winner">Équipe A</div>
+                        <div class="winner-probability">Probabilité: <span id="half-time-probability">64%</span></div>
+                    </div>
+                    
+                    <div class="goals-section">
+                        <div class="goals-label">Prédiction buts</div>
+                        <div class="goals-value">
+                            <span id="half-time-goals">2.5</span>
+                        </div>
+                        <div class="goals-suggestion">Moins de <span id="half-time-goals-suggestion">2.5</span> buts</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -945,30 +1058,33 @@
                 <div class="card-icon">
                     <i class="fas fa-stopwatch"></i>
                 </div>
-                <div class="card-title">Scores prévus temps réglementaire</div>
+                <div class="card-title">Prédictions temps réglementaire</div>
             </div>
             
-            <div class="scores-grid" id="full-time-scores">
-                <div class="score-box">
-                    <div class="score-result">3:1</div>
-                    <div class="score-confidence">Confiance: 61%</div>
+            <div class="prediction-content">
+                <div class="scores-container">
+                    <div class="section-title">
+                        <i class="fas fa-futbol"></i> Scores probables
+                    </div>
+                    <div class="scores-grid" id="full-time-scores">
+                        <!-- Les scores seront ajoutés ici dynamiquement -->
+                    </div>
                 </div>
-                <div class="score-box">
-                    <div class="score-result">2:1</div>
-                    <div class="score-confidence">Confiance: 56%</div>
-                </div>
-            </div>
-            
-            <div class="winner-section">
-                <div class="winner-label">Vainqueur temps réglementaire</div>
-                <div class="winner-team" id="full-time-winner">Équipe A</div>
-                <div class="winner-probability">Probabilité: <span id="full-time-probability">72%</span></div>
-            </div>
-            
-            <div class="goals-section">
-                <div class="goals-label">Nombre de buts temps réglementaire</div>
-                <div class="goals-value">
-                    <span id="full-time-goals">3.5</span>
+                
+                <div class="meta-container">
+                    <div class="winner-section">
+                        <div class="winner-label">Vainqueur match</div>
+                        <div class="winner-team" id="full-time-winner">Équipe A</div>
+                        <div class="winner-probability">Probabilité: <span id="full-time-probability">72%</span></div>
+                    </div>
+                    
+                    <div class="goals-section">
+                        <div class="goals-label">Prédiction buts</div>
+                        <div class="goals-value">
+                            <span id="full-time-goals">3.5</span>
+                        </div>
+                        <div class="goals-suggestion">Plus de <span id="full-time-goals-suggestion">3.5</span> buts</div>
+                    </div>
                 </div>
             </div>
         </div>

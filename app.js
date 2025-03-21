@@ -8,10 +8,10 @@ document.addEventListener("DOMContentLoaded", function() {
         // Changer les couleurs pour correspondre au thème Telegram
         const webAppData = window.Telegram.WebApp;
         if (webAppData.themeParams) {
-            document.documentElement.style.setProperty('--background-color', webAppData.themeParams.bg_color || '#f7f9fb');
-            document.documentElement.style.setProperty('--card-color', webAppData.themeParams.secondary_bg_color || '#ffffff');
-            document.documentElement.style.setProperty('--text-color', webAppData.themeParams.text_color || '#333333');
-            document.documentElement.style.setProperty('--text-secondary', webAppData.themeParams.hint_color || '#666666');
+            document.documentElement.style.setProperty('--bg-dark', webAppData.themeParams.bg_color || '#121212');
+            document.documentElement.style.setProperty('--card-bg', webAppData.themeParams.secondary_bg_color || '#1e1e1e');
+            document.documentElement.style.setProperty('--text-primary', webAppData.themeParams.text_color || '#ffffff');
+            document.documentElement.style.setProperty('--text-secondary', webAppData.themeParams.hint_color || '#b0b0b0');
         }
     } else {
         console.warn("Telegram WebApp non disponible - l'application peut avoir des fonctionnalités limitées");
@@ -79,17 +79,37 @@ const predictionData = {
     
     // Équipes fortes avec leur "force" relative (1-10)
     strongTeams: {
-        "Manchester City": 9.5,
+        "Man City": 9.5,
         "Liverpool": 9.2,
-        "Bayern Munich": 9.3,
-        "Real Madrid": 9.1,
-        "Manchester United": 8.5,
+        "Bayern": 9.3,
+        "Madrid": 9.1,
+        "Man Utd": 8.5,
         "Chelsea": 8.7,
         "Arsenal": 8.3,
         "Tottenham": 8.0,
         "Barcelona": 8.8,
-        "Paris Saint-Germain": 9.0
+        "PSG": 9.0
     }
+};
+
+// Table de correspondance pour les noms d'équipes abrégés
+const teamAbbreviations = {
+    "Manchester United": "Man Utd",
+    "Manchester City": "Man City",
+    "Tottenham Hotspur": "Tottenham",
+    "Newcastle United": "Newcastle",
+    "West Ham United": "West Ham",
+    "Nottingham Forest": "N. Forest",
+    "Sheffield United": "Sheffield Utd",
+    "Borussia Dortmund": "Dortmund",
+    "Bayer Leverkusen": "Leverkusen",
+    "Real Madrid": "Madrid",
+    "Atletico Madrid": "Atletico",
+    "Paris Saint-Germain": "PSG",
+    "Inter Milan": "Inter",
+    "AC Milan": "Milan",
+    "Borussia Mönchengladbach": "Gladbach",
+    "RB Leipzig": "Leipzig"
 };
 
 // Mise en place de tous les gestionnaires d'événements
@@ -124,12 +144,12 @@ function initEventHandlers() {
             return;
         }
         
-        // Mettre à jour les labels avec les noms des équipes
+        // Mettre à jour les labels avec les noms abrégés des équipes
         const team1Label = document.getElementById('odds1-label');
         const team2Label = document.getElementById('odds2-label');
         
-        if (team1Label) team1Label.textContent = `Cote ${team1}`;
-        if (team2Label) team2Label.textContent = `Cote ${team2}`;
+        if (team1Label) team1Label.textContent = `Cote ${getTeamAbbreviation(team1)}`;
+        if (team2Label) team2Label.textContent = `Cote ${getTeamAbbreviation(team2)}`;
         
         showPage('odds-page');
     });
@@ -202,6 +222,11 @@ function setupKeyboardHandling() {
     });
 }
 
+// Obtenir l'abréviation du nom d'équipe
+function getTeamAbbreviation(teamName) {
+    return teamAbbreviations[teamName] || teamName;
+}
+
 // Vérification d'abonnement au canal
 function checkSubscription() {
     console.log("Vérification d'abonnement initiée");
@@ -269,8 +294,7 @@ function startAnalysisAnimation() {
             
             // Animation d'apparition
             setTimeout(() => {
-                messageElement.style.opacity = 1;
-                messageElement.style.transform = 'translateY(0)';
+                messageElement.classList.add('active');
             }, 50);
             
             // Faire défiler automatiquement
@@ -304,7 +328,7 @@ function showPage(pageId) {
 function loadTeamsList() {
     console.log("Chargement de la liste des équipes");
     
-    // Liste d'équipes pour l'application
+    // Liste d'équipes pour l'application (avec leurs noms complets)
     const teams = [
         "Manchester United",
         "Chelsea",
@@ -375,9 +399,13 @@ function populateTeamDropdowns(teams) {
 function generatePrediction(team1, team2, odds1, odds2) {
     console.log(`Génération de prédiction pour ${team1} vs ${team2}`);
     
+    // Abréviations pour les calculs internes
+    const team1Abbr = getTeamAbbreviation(team1);
+    const team2Abbr = getTeamAbbreviation(team2);
+    
     // Analyser les forces des équipes (utiliser les données réelles si disponibles)
-    const team1Strength = predictionData.strongTeams[team1] || 7 + Math.random() * 2;
-    const team2Strength = predictionData.strongTeams[team2] || 7 + Math.random() * 2;
+    const team1Strength = predictionData.strongTeams[team1Abbr] || 7 + Math.random() * 2;
+    const team2Strength = predictionData.strongTeams[team2Abbr] || 7 + Math.random() * 2;
     
     // Ajuster les prédictions en fonction des cotes fournies
     const odds1Value = parseFloat(odds1);
@@ -431,158 +459,159 @@ function generatePrediction(team1, team2, odds1, odds2) {
     }
     
     // Prédiction du nombre de buts (basée sur les statistiques de ligne over/under)
-    const halfTimeGoalsLine = getOptimalGoalLine('halftime');
-    const fullTimeGoalsLine = getOptimalGoalLine('fulltime');
-    
-    // Afficher les résultats
-    displayResults(team1, team2, odds1, odds2, halfTimeScores, fullTimeScores, 
-                 halfTimeWinner, halfTimeProbability, fullTimeWinner, 
-                 fullTimeProbability, halfTimeGoalsLine, fullTimeGoalsLine);
+    // Prédiction du nombre de buts (basée sur les statistiques de ligne over/under)
+   const halfTimeGoalsLine = getOptimalGoalLine('halftime');
+   const fullTimeGoalsLine = getOptimalGoalLine('fulltime');
+   
+   // Afficher les résultats
+   displayResults(team1, team2, odds1, odds2, halfTimeScores, fullTimeScores, 
+                halfTimeWinner, halfTimeProbability, fullTimeWinner, 
+                fullTimeProbability, halfTimeGoalsLine, fullTimeGoalsLine);
 }
 
 // Fonction pour obtenir des scores statistiquement probables
 function getStatisticalScores(period, count, team1Strength, team2Strength, oddsAdvantage) {
-    // Obtenir les scores communs pour la période
-    const commonScores = predictionData.commonScores[period];
-    
-    // Créer une liste de scores pondérés basée sur la fréquence et ajustée par la force des équipes
-    const weightedScores = commonScores.map(scoreData => {
-        const [goalsTeam1, goalsTeam2] = scoreData.score.split(":").map(Number);
-        let weight = scoreData.frequency;
-        
-        // Ajuster le poids en fonction de la force des équipes et de l'avantage des cotes
-        if (goalsTeam1 > goalsTeam2 && team1Strength > team2Strength) {
-            weight *= (1 + (team1Strength - team2Strength) / 10) * oddsAdvantage;
-        } else if (goalsTeam2 > goalsTeam1 && team2Strength > team1Strength) {
-            weight *= (1 + (team2Strength - team1Strength) / 10) * (1 - oddsAdvantage);
-        }
-        
-        return {
-            score: scoreData.score,
-            weight: weight
-        };
-    });
-    
-    // Trier par poids décroissant
-    weightedScores.sort((a, b) => b.weight - a.weight);
-    
-    // Sélectionner les N premiers scores
-    return weightedScores.slice(0, count).map(weightedScore => {
-        return {
-            score: weightedScore.score,
-            confidence: Math.floor(45 + (weightedScore.weight / weightedScores[0].weight) * 30)
-        };
-    });
+   // Obtenir les scores communs pour la période
+   const commonScores = predictionData.commonScores[period];
+   
+   // Créer une liste de scores pondérés basée sur la fréquence et ajustée par la force des équipes
+   const weightedScores = commonScores.map(scoreData => {
+       const [goalsTeam1, goalsTeam2] = scoreData.score.split(":").map(Number);
+       let weight = scoreData.frequency;
+       
+       // Ajuster le poids en fonction de la force des équipes et de l'avantage des cotes
+       if (goalsTeam1 > goalsTeam2 && team1Strength > team2Strength) {
+           weight *= (1 + (team1Strength - team2Strength) / 10) * oddsAdvantage;
+       } else if (goalsTeam2 > goalsTeam1 && team2Strength > team1Strength) {
+           weight *= (1 + (team2Strength - team1Strength) / 10) * (1 - oddsAdvantage);
+       }
+       
+       return {
+           score: scoreData.score,
+           weight: weight
+       };
+   });
+   
+   // Trier par poids décroissant
+   weightedScores.sort((a, b) => b.weight - a.weight);
+   
+   // Sélectionner les N premiers scores
+   return weightedScores.slice(0, count).map(weightedScore => {
+       return {
+           score: weightedScore.score,
+           confidence: Math.floor(45 + (weightedScore.weight / weightedScores[0].weight) * 30)
+       };
+   });
 }
 
 // Calculer la probabilité de victoire
 function calculateWinProbability(teamStrength, opponentStrength, oddsAdvantage, isHome) {
-    // Base de probabilité fondée sur la force relative
-    let baseProbability = 50 + (teamStrength - opponentStrength) * 5;
-    
-    // Ajuster pour l'avantage à domicile si applicable
-    if (isHome) {
-        baseProbability += (predictionData.homeAdvantage * 100 - 50) / 2;
-    }
-    
-    // Ajuster par les cotes
-    baseProbability = baseProbability * oddsAdvantage * 2;
-    
-    // Limiter entre 50-85%
-    return Math.min(85, Math.max(50, Math.floor(baseProbability)));
+   // Base de probabilité fondée sur la force relative
+   let baseProbability = 50 + (teamStrength - opponentStrength) * 5;
+   
+   // Ajuster pour l'avantage à domicile si applicable
+   if (isHome) {
+       baseProbability += (predictionData.homeAdvantage * 100 - 50) / 2;
+   }
+   
+   // Ajuster par les cotes
+   baseProbability = baseProbability * oddsAdvantage * 2;
+   
+   // Limiter entre 50-85%
+   return Math.min(85, Math.max(50, Math.floor(baseProbability)));
 }
 
 // Obtenir la meilleure ligne de buts
 function getOptimalGoalLine(period) {
-    const lines = predictionData.goalLines[period];
-    
-    // Simuler une analyse basée sur les données historiques
-    // Nous choisissons la ligne avec la plus grande différence entre over/under
-    const optimalLine = lines.reduce((best, current) => {
-        const difference = Math.abs(current.overPercentage - current.underPercentage);
-        if (!best || difference > best.difference) {
-            return { 
-                line: current.line, 
-                isOver: current.overPercentage > current.underPercentage,
-                percentage: Math.max(current.overPercentage, current.underPercentage),
-                difference: difference
-            };
-        }
-        return best;
-    }, null);
-    
-    return optimalLine;
+   const lines = predictionData.goalLines[period];
+   
+   // Simuler une analyse basée sur les données historiques
+   // Nous choisissons la ligne avec la plus grande différence entre over/under
+   const optimalLine = lines.reduce((best, current) => {
+       const difference = Math.abs(current.overPercentage - current.underPercentage);
+       if (!best || difference > best.difference) {
+           return { 
+               line: current.line, 
+               isOver: current.overPercentage > current.underPercentage,
+               percentage: Math.max(current.overPercentage, current.underPercentage),
+               difference: difference
+           };
+       }
+       return best;
+   }, null);
+   
+   return optimalLine;
 }
 
 // Afficher les résultats de prédiction
 function displayResults(team1, team2, odds1, odds2, halfTimeScores, fullTimeScores, 
-                       halfTimeWinner, halfTimeProbability, fullTimeWinner, 
-                       fullTimeProbability, halfTimeGoalsLine, fullTimeGoalsLine) {
-    console.log("Affichage des résultats de prédiction");
-    
-    // Titre du match
-    document.getElementById('match-teams').textContent = `${team1} vs ${team2}`;
-    
-    // Scores mi-temps
-    const halfTimeScoresContainer = document.getElementById('half-time-scores');
-    halfTimeScoresContainer.innerHTML = '';
-    
-    halfTimeScores.forEach(score => {
-        const scoreBox = document.createElement('div');
-        scoreBox.className = 'score-box';
-        scoreBox.innerHTML = `
-            <div class="score-result">${score.score}</div>
-            <div class="score-confidence">Confiance: ${score.confidence}%</div>
-        `;
-        halfTimeScoresContainer.appendChild(scoreBox);
-    });
-    
-    // Vainqueur mi-temps
-    document.getElementById('half-time-winner').textContent = halfTimeWinner;
-    document.getElementById('half-time-probability').textContent = `${halfTimeProbability}%`;
-    
-    // Nombre de buts mi-temps
-    document.getElementById('half-time-goals').textContent = halfTimeGoalsLine.line;
-    document.getElementById('half-time-goals-suggestion').textContent = halfTimeGoalsLine.line;
-    
-    // Ajuster le texte de suggestion pour under/over
-    const halfTimeGoalsSuggestion = document.querySelector('.goals-section:first-of-type .goals-suggestion');
-    if (halfTimeGoalsLine.isOver) {
-        halfTimeGoalsSuggestion.textContent = `Plus de ${halfTimeGoalsLine.line} buts (${halfTimeGoalsLine.percentage}%)`;
-    } else {
-        halfTimeGoalsSuggestion.textContent = `Moins de ${halfTimeGoalsLine.line} buts (${halfTimeGoalsLine.percentage}%)`;
-    }
-    
-    // Scores temps réglementaire
-    const fullTimeScoresContainer = document.getElementById('full-time-scores');
-    fullTimeScoresContainer.innerHTML = '';
-    
-    fullTimeScores.forEach(score => {
-        const scoreBox = document.createElement('div');
-        scoreBox.className = 'score-box';
-        scoreBox.innerHTML = `
-            <div class="score-result">${score.score}</div>
-            <div class="score-confidence">Confiance: ${score.confidence}%</div>
-        `;
-        fullTimeScoresContainer.appendChild(scoreBox);
-    });
-    
-    // Vainqueur temps réglementaire
-    document.getElementById('full-time-winner').textContent = fullTimeWinner;
-    document.getElementById('full-time-probability').textContent = `${fullTimeProbability}%`;
-    
-    // Nombre de buts temps réglementaire
-    document.getElementById('full-time-goals').textContent = fullTimeGoalsLine.line;
-    document.getElementById('full-time-goals-suggestion').textContent = fullTimeGoalsLine.line;
-    
-    // Ajuster le texte de suggestion pour under/over
-    const fullTimeGoalsSuggestion = document.querySelector('.goals-section:last-of-type .goals-suggestion');
-    if (fullTimeGoalsLine.isOver) {
-        fullTimeGoalsSuggestion.textContent = `Plus de ${fullTimeGoalsLine.line} buts (${fullTimeGoalsLine.percentage}%)`;
-    } else {
-        fullTimeGoalsSuggestion.textContent = `Moins de ${fullTimeGoalsLine.line} buts (${fullTimeGoalsLine.percentage}%)`;
-    }
-    
-    // Afficher la page de résultats
-    showPage('results-page');
-}
+                      halfTimeWinner, halfTimeProbability, fullTimeWinner, 
+                      fullTimeProbability, halfTimeGoalsLine, fullTimeGoalsLine) {
+   console.log("Affichage des résultats de prédiction");
+   
+   // Titre du match
+   document.getElementById('match-teams').textContent = `${team1} vs ${team2}`;
+   
+   // Scores mi-temps
+   const halfTimeScoresContainer = document.getElementById('half-time-scores');
+   halfTimeScoresContainer.innerHTML = '';
+   
+   halfTimeScores.forEach(score => {
+       const scoreBox = document.createElement('div');
+       scoreBox.className = 'score-box';
+       scoreBox.innerHTML = `
+           <div class="score-result">${score.score}</div>
+           <div class="score-confidence">Confiance: ${score.confidence}%</div>
+       `;
+       halfTimeScoresContainer.appendChild(scoreBox);
+   });
+   
+   // Vainqueur mi-temps
+   document.getElementById('half-time-winner').textContent = halfTimeWinner;
+   document.getElementById('half-time-probability').textContent = `${halfTimeProbability}%`;
+   
+   // Nombre de buts mi-temps
+   document.getElementById('half-time-goals').textContent = halfTimeGoalsLine.line;
+   document.getElementById('half-time-goals-suggestion').textContent = halfTimeGoalsLine.line;
+   
+   // Ajuster le texte de suggestion pour under/over
+   const halfTimeGoalsSuggestion = document.querySelector('.goals-section:first-of-type .goals-suggestion');
+   if (halfTimeGoalsLine.isOver) {
+       halfTimeGoalsSuggestion.textContent = `Plus de ${halfTimeGoalsLine.line} buts (${halfTimeGoalsLine.percentage}%)`;
+   } else {
+       halfTimeGoalsSuggestion.textContent = `Moins de ${halfTimeGoalsLine.line} buts (${halfTimeGoalsLine.percentage}%)`;
+   }
+   
+   // Scores temps réglementaire
+   const fullTimeScoresContainer = document.getElementById('full-time-scores');
+   fullTimeScoresContainer.innerHTML = '';
+   
+   fullTimeScores.forEach(score => {
+       const scoreBox = document.createElement('div');
+       scoreBox.className = 'score-box';
+       scoreBox.innerHTML = `
+           <div class="score-result">${score.score}</div>
+           <div class="score-confidence">Confiance: ${score.confidence}%</div>
+       `;
+       fullTimeScoresContainer.appendChild(scoreBox);
+   });
+   
+   // Vainqueur temps réglementaire
+   document.getElementById('full-time-winner').textContent = fullTimeWinner;
+   document.getElementById('full-time-probability').textContent = `${fullTimeProbability}%`;
+   
+   // Nombre de buts temps réglementaire
+   document.getElementById('full-time-goals').textContent = fullTimeGoalsLine.line;
+   document.getElementById('full-time-goals-suggestion').textContent = fullTimeGoalsLine.line;
+   
+   // Ajuster le texte de suggestion pour under/over
+   const fullTimeGoalsSuggestion = document.querySelector('.goals-section:last-of-type .goals-suggestion');
+   if (fullTimeGoalsLine.isOver) {
+       fullTimeGoalsSuggestion.textContent = `Plus de ${fullTimeGoalsLine.line} buts (${fullTimeGoalsLine.percentage}%)`;
+   } else {
+       fullTimeGoalsSuggestion.textContent = `Moins de ${fullTimeGoalsLine.line} buts (${fullTimeGoalsLine.percentage}%)`;
+   }
+   
+   // Afficher la page de résultats
+   showPage('results-page');
+}l

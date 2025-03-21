@@ -8,8 +8,16 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
-      - key: GOOGLE_CREDENTIALS
-        sync: false # Vous devrez ajouter ce secret dans l'interface Render
+      - key: PORT
+        value: 5000
+      - key: TELEGRAM_TOKEN
+        sync: false # Vous ajouterez cette valeur dans l'interface Render
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false # Vous ajouterez cette valeur dans l'interface Render
+      - key: SPREADSHEET_ID
+        sync: false # Vous ajouterez cette valeur dans l'interface Render
+      - key: DEBUG
+        value: "False"
 
   # Service worker pour le bot Telegram
   - type: worker
@@ -20,8 +28,12 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
-      - key: GOOGLE_CREDENTIALS
-        sync: false # Vous devrez ajouter ce secret dans l'interface Render
+      - key: TELEGRAM_TOKEN
+        sync: false # Synchronisé avec le service API
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false # Synchronisé avec le service API
+      - key: SPREADSHEET_ID
+        sync: false # Synchronisé avec le service API
 
   # Service statique pour l'interface web
   - type: static
@@ -36,3 +48,9 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+    envVars:
+      - key: API_URL
+        fromService:
+          name: fifa-predictor-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL

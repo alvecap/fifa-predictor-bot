@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from predictor import MatchPredictor
 import logging
+import os
 
 # Configuration du logging
 logging.basicConfig(
@@ -72,8 +73,7 @@ def predict():
                 {'score': score['score'], 'confidence': score['confidence']} 
                 for score in prediction['full_time_scores']
             ]
-        
-        # Vainqueur mi-temps
+            # Vainqueur mi-temps
         winner_ht = prediction.get('winner_half_time', {})
         if winner_ht:
             response['halfTimeWinner'] = {
@@ -124,5 +124,18 @@ def get_teams():
         logger.error(f"Erreur lors de la récupération des équipes: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/check-subscription', methods=['POST'])
+def check_subscription():
+    """Endpoint pour vérifier si un utilisateur est abonné au canal"""
+    try:
+        # Dans une implémentation réelle, vous appelleriez l'API Telegram ici
+        # Pour l'instant, on renvoie simplement une réponse positive
+        return jsonify({'isSubscribed': True})
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification d'abonnement: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    debug_mode = os.environ.get('DEBUG', 'False').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)

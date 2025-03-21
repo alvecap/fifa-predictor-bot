@@ -29,12 +29,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
 // Configuration
 const config = {
-    // ID de votre canal Telegram
+    // Ces valeurs seront configurées dynamiquement ou remplacées par l'environnement réel
     channelId: '@alvecapital1',
-    // Bot username
     botUsername: '@FIFA4x4PredictorBot',
-    // URL de l'API sur Render (à remplacer par votre URL une fois déployé)
-    apiUrl: 'https://fifa-predictor-api.onrender.com'
+    apiUrl: window.location.hostname === "localhost" 
+        ? 'http://localhost:5000' 
+        : 'https://fifa-predictor-api.onrender.com'
 };
 
 // Table de correspondance pour les noms d'équipes abrégés

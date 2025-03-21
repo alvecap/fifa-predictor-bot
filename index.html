@@ -923,177 +923,261 @@
                 Important: Vérifiez que vous avez sélectionné les bonnes équipes pour une prédiction précise.
             </div>
         </div>
-        
-        <div class="nav-buttons">
-            <button class="btn back-btn" data-target="dashboard-page" id="back-to-dashboard">
-                <i class="fas fa-arrow-left"></i> Retour
-            </button>
-            
-            <button id="next-to-odds" class="btn next-btn">
-                <i class="fas fa-arrow-right"></i> Suivant
-            </button>
-        </div>
-    </div>
+        <i class="fas fa-arrow-right"></i> Continuer vers l'application
+       </button>
+       
+       <div class="lock-footer">
+           <i class="fas fa-lock"></i> Réservé aux membres
+       </div>
+   </div>
 
-    <!-- Page 4: Entrée des cotes -->
-    <div id="odds-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-calculator"></i>
-            </div>
-        </div>
-        
-        <h1 class="main-title">Entrer les <span class="title-highlight">cotes</span></h1>
-        
-        <div class="card">
-            <p class="text">Entrez les cotes actuelles proposées par les bookmakers:</p>
-            
-            <div class="odds-selection-container">
-                <div class="odds-input">
-                    <label class="odds-label" id="odds1-label" for="odds1">Cote équipe 1</label>
-                    <input type="number" id="odds1" class="input-control" placeholder="Ex: 1.85" step="0.01" min="1.01">
-                </div>
-                
-                <div class="odds-input">
-                    <label class="odds-label" id="odds2-label" for="odds2">Cote équipe 2</label>
-                    <input type="number" id="odds2" class="input-control" placeholder="Ex: 2.25" step="0.01" min="1.01">
-                </div>
-            </div>
-            
-            <div class="helper-note">
-                <i class="fas fa-info-circle"></i> 
-                Utilisez les cotes réelles fournies par Melbet, Mega Paris ou 1xBet.
-            </div>
-        </div>
-        
-        <div class="nav-buttons">
-            <button class="btn back-btn" data-target="teams-selection-page" id="back-to-teams">
-                <i class="fas fa-arrow-left"></i> Retour
-            </button>
-            
-            <button id="generate-prediction" class="btn predict-btn">
-                <i class="fas fa-magic"></i> Obtenir la prédiction
-            </button>
-        </div>
-    </div>
+   <!-- Page 2: Tableau de bord / Accueil -->
+   <div id="dashboard-page" class="page">
+       <div class="logo-container">
+           <div class="logo">
+               <i class="fas fa-futbol"></i>
+           </div>
+       </div>
+       
+       <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
+       
+       <div class="card">
+           <h2 class="subtitle">🏆 Bienvenue dans l'univers FIFA 4x4</h2>
+           
+           <div class="info-block">
+               <p><span class="emoji-icon">🎮</span> FIFA 4x4 est un jeu virtuel de football qui simule des matchs entre les meilleures équipes.</p>
+           </div>
+           
+           <div class="info-block">
+               <p><span class="emoji-icon">🧠</span> Notre IA analyse des milliers de données pour générer des prédictions précises.</p>
+           </div>
+           
+           <div class="info-block">
+               <p><span class="emoji-icon">📊</span> Accédez aux statistiques, tendances et confrontations directes.</p>
+           </div>
+           
+           <div class="info-block">
+               <p><span class="emoji-icon">🔮</span> Obtenez un avantage sur vos paris grâce à nos prédictions basées sur des données réelles!</p>
+           </div>
+       </div>
+       
+       <button id="start-prediction" class="btn predict-btn">
+           <i class="fas fa-play"></i> Commencer une prédiction
+       </button>
+   </div>
 
-    <!-- Page 5: Analyse en cours -->
-    <div id="analysis-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-brain"></i>
-            </div>
-        </div>
-        
-        <h1 class="main-title">Analyse en <span class="title-highlight">cours</span></h1>
-        
-        <div class="card">
-            <p class="text">Notre intelligence artificielle analyse les données et génère votre prédiction...</p>
-            
-            <div class="analysis-container">
-                <div class="analysis-visual">
-                    <div class="analysis-ring"></div>
-                    <div class="analysis-ring"></div>
-                    <div class="analysis-ring"></div>
-                </div>
-                
-                <div class="analysis-message-container" id="analysis-messages">
-                    <!-- Les messages d'analyse seront ajoutés ici par JavaScript -->
-                </div>
-            </div>
-        </div>
-    </div>
+   <!-- Page 3: Sélection des équipes -->
+   <div id="teams-selection-page" class="page">
+       <div class="logo-container">
+           <div class="logo">
+               <i class="fas fa-users"></i>
+           </div>
+       </div>
+       
+       <h1 class="main-title">Sélection des <span class="title-highlight">équipes</span></h1>
+       
+       <div class="card">
+           <p class="text">Sélectionnez les deux équipes qui s'affrontent:</p>
+           
+           <div class="team-selection-container">
+               <div class="team-select">
+                   <label class="team-label" for="team1">Équipe 1</label>
+                   <select id="team1" class="select-control">
+                       <option value="" disabled selected>Sélectionner une équipe</option>
+                   </select>
+               </div>
+               
+               <div class="versus-badge">VS</div>
+               
+               <div class="team-select">
+                   <label class="team-label" for="team2">Équipe 2</label>
+                   <select id="team2" class="select-control">
+                       <option value="" disabled selected>Sélectionner une équipe</option>
+                   </select>
+               </div>
+           </div>
+           
+           <div class="helper-note">
+               <i class="fas fa-info-circle"></i> 
+               Important: Vérifiez que vous avez sélectionné les bonnes équipes pour une prédiction précise.
+           </div>
+       </div>
+       
+       <div class="nav-buttons">
+           <button class="btn back-btn" data-target="dashboard-page" id="back-to-dashboard">
+               <i class="fas fa-arrow-left"></i> Retour
+           </button>
+           
+           <button id="next-to-odds" class="btn next-btn">
+               <i class="fas fa-arrow-right"></i> Suivant
+           </button>
+       </div>
+   </div>
 
-    <!-- Page 6: Résultats de prédiction -->
-    <div id="results-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-trophy"></i>
-            </div>
-        </div>
-        
-        <h1 class="main-title">Résultat de <span class="title-highlight">prédiction</span></h1>
-        <h2 class="match-title" id="match-teams">Équipe A vs Équipe B</h2>
-        
-        <!-- Scores 1ère mi-temps -->
-        <div class="result-card">
-            <div class="card-header">
-                <div class="card-icon">
-                    <i class="fas fa-hourglass-half"></i>
-                </div>
-                <div class="card-title">Prédictions 1ère mi-temps</div>
-            </div>
-            
-            <div class="prediction-content">
-                <div class="scores-container">
-                    <div class="section-title">
-                        <i class="fas fa-futbol"></i> Scores probables
-                    </div>
-                    <div class="scores-grid" id="half-time-scores">
-                        <!-- Les scores seront ajoutés ici dynamiquement -->
-                    </div>
-                </div>
-                
-                <div class="meta-container">
-                    <div class="winner-section">
-                        <div class="winner-label">Vainqueur mi-temps</div>
-                        <div class="winner-team" id="half-time-winner">Équipe A</div>
-                        <div class="winner-probability">Probabilité: <span id="half-time-probability">64%</span></div>
-                    </div>
-                    
-                    <div class="goals-section">
-                        <div class="goals-label">Prédiction buts</div>
-                        <div class="goals-value">
-                            <span id="half-time-goals">2.5</span>
-                        </div>
-                        <div class="goals-suggestion">Moins de <span id="half-time-goals-suggestion">2.5</span> buts</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Scores temps réglementaire -->
-        <div class="result-card">
-            <div class="card-header">
-                <div class="card-icon">
-                    <i class="fas fa-stopwatch"></i>
-                </div>
-                <div class="card-title">Prédictions temps réglementaire</div>
-            </div>
-            
-            <div class="prediction-content">
-                <div class="scores-container">
-                    <div class="section-title">
-                        <i class="fas fa-futbol"></i> Scores probables
-                    </div>
-                    <div class="scores-grid" id="full-time-scores">
-                        <!-- Les scores seront ajoutés ici dynamiquement -->
-                    </div>
-                </div>
-                
-                <div class="meta-container">
-                    <div class="winner-section">
-                        <div class="winner-label">Vainqueur match</div>
-                        <div class="winner-team" id="full-time-winner">Équipe A</div>
-                        <div class="winner-probability">Probabilité: <span id="full-time-probability">72%</span></div>
-                    </div>
-                    
-                    <div class="goals-section">
-                        <div class="goals-label">Prédiction buts</div>
-                        <div class="goals-value">
-                            <span id="full-time-goals">3.5</span>
-                        </div>
-                        <div class="goals-suggestion">Plus de <span id="full-time-goals-suggestion">3.5</span> buts</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <button id="new-prediction-btn" class="btn primary-btn">
-            <i class="fas fa-sync"></i> Nouvelle prédiction
-        </button>
-    </div>
+   <!-- Page 4: Entrée des cotes -->
+   <div id="odds-page" class="page">
+       <div class="logo-container">
+           <div class="logo">
+               <i class="fas fa-calculator"></i>
+           </div>
+       </div>
+       
+       <h1 class="main-title">Entrer les <span class="title-highlight">cotes</span></h1>
+       
+       <div class="card">
+           <p class="text">Entrez les cotes actuelles proposées par les bookmakers:</p>
+           
+           <div class="odds-selection-container">
+               <div class="odds-input">
+                   <label class="odds-label" id="odds1-label" for="odds1">Cote équipe 1</label>
+                   <input type="number" id="odds1" class="input-control" placeholder="Ex: 1.85" step="0.01" min="1.01">
+               </div>
+               
+               <div class="odds-input">
+                   <label class="odds-label" id="odds2-label" for="odds2">Cote équipe 2</label>
+                   <input type="number" id="odds2" class="input-control" placeholder="Ex: 2.25" step="0.01" min="1.01">
+               </div>
+           </div>
+           
+           <div class="helper-note">
+               <i class="fas fa-info-circle"></i> 
+               Utilisez les cotes réelles fournies par Melbet, Mega Paris ou 1xBet.
+           </div>
+       </div>
+       
+       <div class="nav-buttons">
+           <button class="btn back-btn" data-target="teams-selection-page" id="back-to-teams">
+               <i class="fas fa-arrow-left"></i> Retour
+           </button>
+           
+           <button id="generate-prediction" class="btn predict-btn">
+               <i class="fas fa-magic"></i> Obtenir la prédiction
+           </button>
+       </div>
+   </div>
 
-    <script src="app.js"></script>
+   <!-- Page 5: Analyse en cours -->
+   <div id="analysis-page" class="page">
+       <div class="logo-container">
+           <div class="logo">
+               <i class="fas fa-brain"></i>
+           </div>
+       </div>
+       
+       <h1 class="main-title">Analyse en <span class="title-highlight">cours</span></h1>
+       
+       <div class="card">
+           <p class="text">Notre intelligence artificielle analyse les données et génère votre prédiction...</p>
+           
+           <div class="analysis-container">
+               <div class="analysis-visual">
+                   <div class="analysis-cube">
+                       <div class="cube-face face-front"></div>
+                       <div class="cube-face face-back"></div>
+                       <div class="cube-face face-right"></div>
+                       <div class="cube-face face-left"></div>
+                       <div class="cube-face face-top"></div>
+                       <div class="cube-face face-bottom"></div>
+                   </div>
+               </div>
+               
+               <div class="analysis-message-container" id="analysis-messages">
+                   <!-- Les messages d'analyse seront ajoutés ici par JavaScript -->
+               </div>
+           </div>
+       </div>
+   </div>
+
+   <!-- Page 6: Résultats de prédiction -->
+   <div id="results-page" class="page">
+       <div class="logo-container">
+           <div class="logo">
+               <i class="fas fa-trophy"></i>
+           </div>
+       </div>
+       
+       <h1 class="main-title">Résultat de <span class="title-highlight">prédiction</span></h1>
+       <h2 class="match-title" id="match-teams">Équipe A vs Équipe B</h2>
+       
+       <!-- Scores 1ère mi-temps -->
+       <div class="result-card">
+           <div class="card-header">
+               <div class="card-icon">
+                   <i class="fas fa-hourglass-half"></i>
+               </div>
+               <div class="card-title">Prédictions 1ère mi-temps</div>
+           </div>
+           
+           <div class="prediction-content">
+               <div class="scores-container">
+                   <div class="section-title">
+                       <i class="fas fa-futbol"></i> Scores probables
+                   </div>
+                   <div class="scores-grid" id="half-time-scores">
+                       <!-- Les scores seront ajoutés ici dynamiquement -->
+                   </div>
+               </div>
+               
+               <div class="meta-container">
+                   <div class="winner-section">
+                       <div class="winner-label">Vainqueur mi-temps</div>
+                       <div class="winner-team" id="half-time-winner">Équipe A</div>
+                       <div class="winner-probability">Probabilité: <span id="half-time-probability">64%</span></div>
+                   </div>
+                   
+                   <div class="goals-section">
+                       <div class="goals-label">Prédiction buts</div>
+                       <div class="goals-value">
+                           <span id="half-time-goals">2.5</span>
+                       </div>
+                       <div class="goals-suggestion">Moins de <span id="half-time-goals-suggestion">2.5</span> buts</div>
+                   </div>
+               </div>
+           </div>
+       </div>
+       
+       <!-- Scores temps réglementaire -->
+       <div class="result-card">
+           <div class="card-header">
+               <div class="card-icon">
+                   <i class="fas fa-stopwatch"></i>
+               </div>
+               <div class="card-title">Prédictions temps réglementaire</div>
+           </div>
+           
+           <div class="prediction-content">
+               <div class="scores-container">
+                   <div class="section-title">
+                       <i class="fas fa-futbol"></i> Scores probables
+                   </div>
+                   <div class="scores-grid" id="full-time-scores">
+                       <!-- Les scores seront ajoutés ici dynamiquement -->
+                   </div>
+               </div>
+               
+               <div class="meta-container">
+                   <div class="winner-section">
+                       <div class="winner-label">Vainqueur match</div>
+                       <div class="winner-team" id="full-time-winner">Équipe A</div>
+                       <div class="winner-probability">Probabilité: <span id="full-time-probability">72%</span></div>
+                   </div>
+                   
+                   <div class="goals-section">
+                       <div class="goals-label">Prédiction buts</div>
+                       <div class="goals-value">
+                           <span id="full-time-goals">3.5</span>
+                       </div>
+                       <div class="goals-suggestion">Plus de <span id="full-time-goals-suggestion">3.5</span> buts</div>
+                   </div>
+               </div>
+           </div>
+       </div>
+       
+       <button id="new-prediction-btn" class="btn primary-btn">
+           <i class="fas fa-sync"></i> Nouvelle prédiction
+       </button>
+   </div>
+
+   <script src="app.js"></script>
 </body>
 </html>

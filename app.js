@@ -8,8 +8,8 @@ document.addEventListener("DOMContentLoaded", function() {
         // Changer les couleurs pour correspondre au thème Telegram
         const webAppData = window.Telegram.WebApp;
         if (webAppData.themeParams) {
-            document.documentElement.style.setProperty('--bg-dark', webAppData.themeParams.bg_color || '#121212');
-            document.documentElement.style.setProperty('--card-bg', webAppData.themeParams.secondary_bg_color || '#1e1e1e');
+            document.documentElement.style.setProperty('--bg-dark', webAppData.themeParams.bg_color || '#0a1929');
+            document.documentElement.style.setProperty('--card-bg', webAppData.themeParams.secondary_bg_color || '#102a43');
             document.documentElement.style.setProperty('--text-primary', webAppData.themeParams.text_color || '#ffffff');
             document.documentElement.style.setProperty('--text-secondary', webAppData.themeParams.hint_color || '#b0b0b0');
         }
@@ -32,64 +32,9 @@ const config = {
     // ID de votre canal Telegram
     channelId: '@alvecapital1',
     // Bot username
-    botUsername: '@FIFA4x4PredictorBot'
-};
-
-// Base de données simulée pour des prédictions basées sur des données statistiques réelles
-const predictionData = {
-    // Statistiques de scores fréquents (basées sur les données historiques)
-    commonScores: {
-        halftime: [
-            { score: "1:0", frequency: 28 },
-            { score: "0:0", frequency: 24 },
-            { score: "0:1", frequency: 22 },
-            { score: "1:1", frequency: 18 },
-            { score: "2:0", frequency: 12 },
-            { score: "0:2", frequency: 10 }
-        ],
-        fulltime: [
-            { score: "2:1", frequency: 20 },
-            { score: "1:0", frequency: 18 },
-            { score: "2:0", frequency: 16 },
-            { score: "1:1", frequency: 15 },
-            { score: "3:1", frequency: 12 },
-            { score: "0:1", frequency: 10 },
-            { score: "3:2", frequency: 8 },
-            { score: "4:2", frequency: 5 }
-        ]
-    },
-    
-    // Statistiques de buts (lignes Over/Under)
-    goalLines: {
-        halftime: [
-            { line: 0.5, underPercentage: 30, overPercentage: 70 },
-            { line: 1.5, underPercentage: 62, overPercentage: 38 },
-            { line: 2.5, underPercentage: 78, overPercentage: 22 }
-        ],
-        fulltime: [
-            { line: 1.5, underPercentage: 25, overPercentage: 75 },
-            { line: 2.5, underPercentage: 42, overPercentage: 58 },
-            { line: 3.5, underPercentage: 65, overPercentage: 35 },
-            { line: 4.5, underPercentage: 80, overPercentage: 20 }
-        ]
-    },
-    
-    // Statistiques d'avantage à domicile/extérieur
-    homeAdvantage: 0.58, // Pourcentage des équipes qui gagnent à domicile
-    
-    // Équipes fortes avec leur "force" relative (1-10)
-    strongTeams: {
-        "Man City": 9.5,
-        "Liverpool": 9.2,
-        "Bayern": 9.3,
-        "Madrid": 9.1,
-        "Man Utd": 8.5,
-        "Chelsea": 8.7,
-        "Arsenal": 8.3,
-        "Tottenham": 8.0,
-        "Barcelona": 8.8,
-        "PSG": 9.0
-    }
+    botUsername: '@FIFA4x4PredictorBot',
+    // URL de l'API pour se connecter au Google Sheet (à mettre à jour avec votre propre API)
+    apiUrl: 'https://alvecapital-predictor-api.herokuapp.com'
 };
 
 // Table de correspondance pour les noms d'équipes abrégés
@@ -108,8 +53,9 @@ const teamAbbreviations = {
     "Paris Saint-Germain": "PSG",
     "Inter Milan": "Inter",
     "AC Milan": "Milan",
-    "Borussia Mönchengladbach": "Gladbach",
-    "RB Leipzig": "Leipzig"
+    "Juventus": "Juve",
+    "Barcelona": "Barca",
+    "Bayern Munich": "Bayern"
 };
 
 // Mise en place de tous les gestionnaires d'événements
@@ -179,8 +125,9 @@ function initEventHandlers() {
         startAnalysisAnimation();
         
         // Attendre quelques secondes puis générer la prédiction
+        // En production, ceci serait remplacé par un appel API réel à votre Google Sheet
         setTimeout(function() {
-            generatePrediction(team1, team2, odds1, odds2);
+            fetchPredictionFromAPI(team1, team2, odds1, odds2);
         }, 4000);
     });
     
@@ -328,7 +275,8 @@ function showPage(pageId) {
 function loadTeamsList() {
     console.log("Chargement de la liste des équipes");
     
-    // Liste d'équipes pour l'application (avec leurs noms complets)
+    // Idéalement, la liste serait chargée à partir de votre Google Sheet
+    // Pour cette démonstration, nous utilisons une liste statique
     const teams = [
         "Manchester United",
         "Chelsea",
@@ -395,223 +343,141 @@ function populateTeamDropdowns(teams) {
     console.log(`${teams.length} équipes chargées dans les menus déroulants`);
 }
 
-// Générer une prédiction
-function generatePrediction(team1, team2, odds1, odds2) {
+// En production, cette fonction ferait un appel API à votre Google Sheet
+function fetchPredictionFromAPI(team1, team2, odds1, odds2) {
     console.log(`Génération de prédiction pour ${team1} vs ${team2}`);
     
-    // Abréviations pour les calculs internes
-    const team1Abbr = getTeamAbbreviation(team1);
-    const team2Abbr = getTeamAbbreviation(team2);
+    // Simuler un appel API avec des données qui viendraient de votre Google Sheet
+    // Dans une vraie implémentation, vous feriez un fetch() à votre backend
     
-    // Analyser les forces des équipes (utiliser les données réelles si disponibles)
-    const team1Strength = predictionData.strongTeams[team1Abbr] || 7 + Math.random() * 2;
-    const team2Strength = predictionData.strongTeams[team2Abbr] || 7 + Math.random() * 2;
+    /*
+    // Code pour une vraie implémentation API:
+    fetch(`${config.apiUrl}/predict`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            team1,
+            team2,
+            odds1,
+            odds2
+        }),
+    })
+    .then(response => response.json())
+    .then(prediction => {
+        displayResults(prediction);
+    })
+    .catch(error => {
+        console.error('Erreur lors de la récupération des prédictions:', error);
+        alert('Une erreur est survenue lors de la génération des prédictions. Veuillez réessayer.');
+    });
+    */
     
-    // Ajuster les prédictions en fonction des cotes fournies
-    const odds1Value = parseFloat(odds1);
-    const odds2Value = parseFloat(odds2);
-    
-    // Calculer l'avantage relatif basé sur les cotes
-    const oddsAdvantage = odds2Value / (odds1Value + odds2Value);
-    
-    // Sélectionner les scores mi-temps (exactement 2, basés sur les statistiques)
-    let halfTimeScores = getStatisticalScores('halftime', 2, team1Strength, team2Strength, oddsAdvantage);
-    
-    // Sélectionner les scores temps réglementaire (exactement 2, basés sur les statistiques)
-    let fullTimeScores = getStatisticalScores('fulltime', 2, team1Strength, team2Strength, oddsAdvantage);
-    
-    // Déterminer le gagnant mi-temps (basé sur le score le plus probable)
-    const halfTimeScore = halfTimeScores[0].score.split(":");
-    const halfTimeTeam1Goals = parseInt(halfTimeScore[0]);
-    const halfTimeTeam2Goals = parseInt(halfTimeScore[1]);
-    
-    let halfTimeWinner, halfTimeProbability;
-    
-    if (halfTimeTeam1Goals > halfTimeTeam2Goals) {
-        halfTimeWinner = team1;
-        halfTimeProbability = calculateWinProbability(team1Strength, team2Strength, oddsAdvantage, true);
-    } else if (halfTimeTeam2Goals > halfTimeTeam1Goals) {
-        halfTimeWinner = team2;
-        halfTimeProbability = calculateWinProbability(team2Strength, team1Strength, 1 - oddsAdvantage, false);
-    } else {
-        halfTimeWinner = "Match nul";
-        halfTimeProbability = 100 - (calculateWinProbability(team1Strength, team2Strength, oddsAdvantage, true) + 
-                              calculateWinProbability(team2Strength, team1Strength, 1 - oddsAdvantage, false));
-    }
-    
-    // Déterminer le gagnant temps réglementaire
-    const fullTimeScore = fullTimeScores[0].score.split(":");
-    const fullTimeTeam1Goals = parseInt(fullTimeScore[0]);
-    const fullTimeTeam2Goals = parseInt(fullTimeScore[1]);
-    
-    let fullTimeWinner, fullTimeProbability;
-    
-    if (fullTimeTeam1Goals > fullTimeTeam2Goals) {
-        fullTimeWinner = team1;
-        fullTimeProbability = calculateWinProbability(team1Strength, team2Strength, oddsAdvantage, true);
-    } else if (fullTimeTeam2Goals > fullTimeTeam1Goals) {
-        fullTimeWinner = team2;
-        fullTimeProbability = calculateWinProbability(team2Strength, team1Strength, 1 - oddsAdvantage, false);
-    } else {
-        fullTimeWinner = "Match nul";
-        fullTimeProbability = 100 - (calculateWinProbability(team1Strength, team2Strength, oddsAdvantage, true) + 
-                              calculateWinProbability(team2Strength, team1Strength, 1 - oddsAdvantage, false));
-    }
-    
-    // Prédiction du nombre de buts (basée sur les statistiques de ligne over/under)
-    // Prédiction du nombre de buts (basée sur les statistiques de ligne over/under)
-   const halfTimeGoalsLine = getOptimalGoalLine('halftime');
-   const fullTimeGoalsLine = getOptimalGoalLine('fulltime');
-   
-   // Afficher les résultats
-   displayResults(team1, team2, odds1, odds2, halfTimeScores, fullTimeScores, 
-                halfTimeWinner, halfTimeProbability, fullTimeWinner, 
-                fullTimeProbability, halfTimeGoalsLine, fullTimeGoalsLine);
-}
-
-// Fonction pour obtenir des scores statistiquement probables
-function getStatisticalScores(period, count, team1Strength, team2Strength, oddsAdvantage) {
-   // Obtenir les scores communs pour la période
-   const commonScores = predictionData.commonScores[period];
-   
-   // Créer une liste de scores pondérés basée sur la fréquence et ajustée par la force des équipes
-   const weightedScores = commonScores.map(scoreData => {
-       const [goalsTeam1, goalsTeam2] = scoreData.score.split(":").map(Number);
-       let weight = scoreData.frequency;
-       
-       // Ajuster le poids en fonction de la force des équipes et de l'avantage des cotes
-       if (goalsTeam1 > goalsTeam2 && team1Strength > team2Strength) {
-           weight *= (1 + (team1Strength - team2Strength) / 10) * oddsAdvantage;
-       } else if (goalsTeam2 > goalsTeam1 && team2Strength > team1Strength) {
-           weight *= (1 + (team2Strength - team1Strength) / 10) * (1 - oddsAdvantage);
-       }
-       
-       return {
-           score: scoreData.score,
-           weight: weight
-       };
-   });
-   
-   // Trier par poids décroissant
-   weightedScores.sort((a, b) => b.weight - a.weight);
-   
-   // Sélectionner les N premiers scores
-   return weightedScores.slice(0, count).map(weightedScore => {
-       return {
-           score: weightedScore.score,
-           confidence: Math.floor(45 + (weightedScore.weight / weightedScores[0].weight) * 30)
-       };
-   });
-}
-
-// Calculer la probabilité de victoire
-function calculateWinProbability(teamStrength, opponentStrength, oddsAdvantage, isHome) {
-   // Base de probabilité fondée sur la force relative
-   let baseProbability = 50 + (teamStrength - opponentStrength) * 5;
-   
-   // Ajuster pour l'avantage à domicile si applicable
-   if (isHome) {
-       baseProbability += (predictionData.homeAdvantage * 100 - 50) / 2;
-   }
-   
-   // Ajuster par les cotes
-   baseProbability = baseProbability * oddsAdvantage * 2;
-   
-   // Limiter entre 50-85%
-   return Math.min(85, Math.max(50, Math.floor(baseProbability)));
-}
-
-// Obtenir la meilleure ligne de buts
-function getOptimalGoalLine(period) {
-   const lines = predictionData.goalLines[period];
-   
-   // Simuler une analyse basée sur les données historiques
-   // Nous choisissons la ligne avec la plus grande différence entre over/under
-   const optimalLine = lines.reduce((best, current) => {
-       const difference = Math.abs(current.overPercentage - current.underPercentage);
-       if (!best || difference > best.difference) {
-           return { 
-               line: current.line, 
-               isOver: current.overPercentage > current.underPercentage,
-               percentage: Math.max(current.overPercentage, current.underPercentage),
-               difference: difference
-           };
-       }
-       return best;
-   }, null);
-   
-   return optimalLine;
+    // Simulation de données provenant du Google Sheet
+    setTimeout(() => {
+        const prediction = {
+            team1: team1,
+            team2: team2,
+            halfTimeScores: [
+                { score: Math.floor(Math.random() * 2) + ":" + Math.floor(Math.random() * 2), confidence: Math.floor(Math.random() * 15) + 65 },
+                { score: Math.floor(Math.random() * 2) + ":" + Math.floor(Math.random() * 2), confidence: Math.floor(Math.random() * 10) + 55 }
+            ],
+            fullTimeScores: [
+                { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 15) + 65 },
+                { score: Math.floor(Math.random() * 3) + ":" + Math.floor(Math.random() * 3), confidence: Math.floor(Math.random() * 10) + 55 }
+            ],
+            halfTimeWinner: {
+                team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Match nul"),
+                probability: Math.floor(Math.random() * 15) + 65
+            },
+            fullTimeWinner: {
+                team: Math.random() > 0.6 ? team1 : (Math.random() > 0.5 ? team2 : "Match nul"),
+                probability: Math.floor(Math.random() * 15) + 65
+            },
+            halfTimeGoals: {
+                line: [0.5, 1.5, 2.5][Math.floor(Math.random() * 3)],
+                isOver: Math.random() > 0.5,
+                percentage: Math.floor(Math.random() * 15) + 65
+            },
+            fullTimeGoals: {
+                line: [1.5, 2.5, 3.5, 4.5][Math.floor(Math.random() * 4)],
+                isOver: Math.random() > 0.5,
+                percentage: Math.floor(Math.random() * 15) + 65
+            }
+        };
+        
+        displayResults(prediction);
+    }, 500);
 }
 
 // Afficher les résultats de prédiction
-function displayResults(team1, team2, odds1, odds2, halfTimeScores, fullTimeScores, 
-                      halfTimeWinner, halfTimeProbability, fullTimeWinner, 
-                      fullTimeProbability, halfTimeGoalsLine, fullTimeGoalsLine) {
-   console.log("Affichage des résultats de prédiction");
-   
-   // Titre du match
-   document.getElementById('match-teams').textContent = `${team1} vs ${team2}`;
-   
-   // Scores mi-temps
-   const halfTimeScoresContainer = document.getElementById('half-time-scores');
-   halfTimeScoresContainer.innerHTML = '';
-   
-   halfTimeScores.forEach(score => {
-       const scoreBox = document.createElement('div');
-       scoreBox.className = 'score-box';
-       scoreBox.innerHTML = `
-           <div class="score-result">${score.score}</div>
-           <div class="score-confidence">Confiance: ${score.confidence}%</div>
-       `;
-       halfTimeScoresContainer.appendChild(scoreBox);
-   });
-   
-   // Vainqueur mi-temps
-   document.getElementById('half-time-winner').textContent = halfTimeWinner;
-   document.getElementById('half-time-probability').textContent = `${halfTimeProbability}%`;
-   
-   // Nombre de buts mi-temps
-   document.getElementById('half-time-goals').textContent = halfTimeGoalsLine.line;
-   document.getElementById('half-time-goals-suggestion').textContent = halfTimeGoalsLine.line;
-   
-   // Ajuster le texte de suggestion pour under/over
-   const halfTimeGoalsSuggestion = document.querySelector('.goals-section:first-of-type .goals-suggestion');
-   if (halfTimeGoalsLine.isOver) {
-       halfTimeGoalsSuggestion.textContent = `Plus de ${halfTimeGoalsLine.line} buts (${halfTimeGoalsLine.percentage}%)`;
-   } else {
-       halfTimeGoalsSuggestion.textContent = `Moins de ${halfTimeGoalsLine.line} buts (${halfTimeGoalsLine.percentage}%)`;
-   }
-   
-   // Scores temps réglementaire
-   const fullTimeScoresContainer = document.getElementById('full-time-scores');
-   fullTimeScoresContainer.innerHTML = '';
-   
-   fullTimeScores.forEach(score => {
-       const scoreBox = document.createElement('div');
-       scoreBox.className = 'score-box';
-       scoreBox.innerHTML = `
-           <div class="score-result">${score.score}</div>
-           <div class="score-confidence">Confiance: ${score.confidence}%</div>
-       `;
-       fullTimeScoresContainer.appendChild(scoreBox);
-   });
-   
-   // Vainqueur temps réglementaire
-   document.getElementById('full-time-winner').textContent = fullTimeWinner;
-   document.getElementById('full-time-probability').textContent = `${fullTimeProbability}%`;
-   
-   // Nombre de buts temps réglementaire
-   document.getElementById('full-time-goals').textContent = fullTimeGoalsLine.line;
-   document.getElementById('full-time-goals-suggestion').textContent = fullTimeGoalsLine.line;
-   
-   // Ajuster le texte de suggestion pour under/over
-   const fullTimeGoalsSuggestion = document.querySelector('.goals-section:last-of-type .goals-suggestion');
-   if (fullTimeGoalsLine.isOver) {
-       fullTimeGoalsSuggestion.textContent = `Plus de ${fullTimeGoalsLine.line} buts (${fullTimeGoalsLine.percentage}%)`;
-   } else {
-       fullTimeGoalsSuggestion.textContent = `Moins de ${fullTimeGoalsLine.line} buts (${fullTimeGoalsLine.percentage}%)`;
-   }
-   
-   // Afficher la page de résultats
-   showPage('results-page');
-}l
+function displayResults(prediction) {
+    console.log("Affichage des résultats de prédiction");
+    
+    // Titre du match
+    document.getElementById('match-teams').textContent = `${prediction.team1} vs ${prediction.team2}`;
+    
+    // Scores mi-temps
+    const halfTimeScoresContainer = document.getElementById('half-time-scores');
+    halfTimeScoresContainer.innerHTML = '';
+    
+    prediction.halfTimeScores.forEach(score => {
+        const scoreBox = document.createElement('div');
+        scoreBox.className = 'score-box';
+        scoreBox.innerHTML = `
+            <div class="score-result">${score.score}</div>
+            <div class="score-confidence">Confiance: ${score.confidence}%</div>
+        `;
+        halfTimeScoresContainer.appendChild(scoreBox);
+    });
+    
+    // Vainqueur mi-temps
+    document.getElementById('half-time-winner').textContent = prediction.halfTimeWinner.team;
+    document.getElementById('half-time-probability').textContent = `${prediction.halfTimeWinner.probability}%`;
+    
+    // Nombre de buts mi-temps
+    document.getElementById('half-time-goals').textContent = prediction.halfTimeGoals.line;
+    document.getElementById('half-time-goals-suggestion').textContent = prediction.halfTimeGoals.line;
+    
+    // Ajuster le texte de suggestion pour under/over
+    const halfTimeGoalsSuggestion = document.querySelector('.goals-section:first-of-type .goals-suggestion');
+    if (prediction.halfTimeGoals.isOver) {
+        halfTimeGoalsSuggestion.textContent = `Plus de ${prediction.halfTimeGoals.line} buts (${prediction.halfTimeGoals.percentage}%)`;
+    } else {
+        halfTimeGoalsSuggestion.textContent = `Moins de ${prediction.halfTimeGoals.line} buts (${prediction.halfTimeGoals.percentage}%)`;
+    }
+    
+    // Scores temps réglementaire
+    const fullTimeScoresContainer = document.getElementById('full-time-scores');
+    fullTimeScoresContainer.innerHTML = '';
+    
+    prediction.fullTimeScores.forEach(score => {
+        const scoreBox = document.createElement('div');
+        scoreBox.className = 'score-box';
+        scoreBox.innerHTML = `
+            <div class="score-result">${score.score}</div>
+            <div class="score-confidence">Confiance: ${score.confidence}%</div>
+        `;
+        fullTimeScoresContainer.appendChild(scoreBox);
+    });
+    
+    // Vainqueur temps réglementaire
+    document.getElementById('full-time-winner').textContent = prediction.fullTimeWinner.team;
+    document.getElementById('full-time-probability').textContent = `${prediction.fullTimeWinner.probability}%`;
+    
+    // Nombre de buts temps réglementaire
+    document.getElementById('full-time-goals').textContent = prediction.fullTimeGoals.line;
+    document.getElementById('full-time-goals-suggestion').textContent = prediction.fullTimeGoals.line;
+    
+    // Ajuster le texte de suggestion pour under/over
+    const fullTimeGoalsSuggestion = document.querySelector('.goals-section:last-of-type .goals-suggestion');
+    if (prediction.fullTimeGoals.isOver) {
+        fullTimeGoalsSuggestion.textContent = `Plus de ${prediction.fullTimeGoals.line} buts (${prediction.fullTimeGoals.percentage}%)`;
+    } else {
+        fullTimeGoalsSuggestion.textContent = `Moins de ${prediction.fullTimeGoals.line} buts (${prediction.fullTimeGoals.percentage}%)`;
+    }
+    
+    // Afficher la page de résultats
+    showPage('results-page');
+}

@@ -8,18 +8,25 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --tg-color: #0088cc;
-            --tg-gradient: linear-gradient(135deg, #0088cc, #33a9dc);
+            /* Palette de couleurs bleu nuit */
+            --bg-dark: #0a1929;
+            --card-bg: #102a43;
+            --accent-primary: #0088cc;
+            --accent-gradient: linear-gradient(135deg, #0088cc, #00c6ff);
+            --accent-secondary: #FF6B6B;
+            --accent-secondary-gradient: linear-gradient(135deg, #FF6B6B, #FF8E8E);
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
             --premium-gold: #ffd700;
             --premium-gradient: linear-gradient(135deg, #b8860b, #ffd700);
-            --predictor-color: #FF6B6B;
-            --accent-green: #4CAF50;
-            --accent-blue: #2196F3;
-            --accent-orange: #FF9800;
-            --dark-blue: #005a9e;
-            --light-blue: #e3f2fd;
-            --light-green: #e8f5e9;
-            --light-orange: #fff3e0;
+            --success-color: #4CAF50;
+            --success-gradient: linear-gradient(135deg, #4CAF50, #81C784);
+            --warning-color: #FF9800;
+            --warning-gradient: linear-gradient(135deg, #FF9800, #FFB74D);
+            --info-color: #2196F3;
+            --info-gradient: linear-gradient(135deg, #2196F3, #64B5F6);
+            --neon-shadow: 0 0 10px rgba(0, 136, 204, 0.7);
+            --card-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
         }
         
         * {
@@ -30,8 +37,8 @@
         }
         
         body {
-            background-color: #f0f2f5;
-            color: #333;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
             line-height: 1.5;
             text-align: center;
         }
@@ -62,11 +69,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--tg-gradient);
+            background: var(--accent-gradient);
             border-radius: 50%;
             color: white;
             font-size: 36px;
-            box-shadow: 0 4px 20px rgba(0, 136, 204, 0.3);
+            box-shadow: var(--neon-shadow);
             position: relative;
             overflow: hidden;
             animation: pulse 3s infinite;
@@ -101,24 +108,25 @@
             width: 100%;
             font-size: 30px;
             font-weight: 800;
-            color: #333;
+            color: var(--text-primary);
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.2);
         }
         
         .main-title span {
-            color: var(--predictor-color);
-            text-shadow: 0 1px 2px rgba(255, 107, 107, 0.2);
+            color: var(--accent-secondary);
+            text-shadow: 0 0 8px rgba(255, 107, 107, 0.4);
         }
 
         /* Styles améliorés pour la page d'abonnement */
         .premium-card {
             border-top: 5px solid var(--premium-gold);
             padding: 0;
-            background-color: white;
+            background-color: var(--card-bg);
             border-radius: 16px;
             margin-bottom: 25px;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-            border: 1px solid rgba(0, 0, 0, 0.04);
+            box-shadow: var(--card-shadow);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             overflow: hidden;
             transform: translateY(0);
             transition: transform 0.3s ease;
@@ -126,6 +134,7 @@
         
         .premium-card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
         }
 
         .channel-badge {
@@ -150,7 +159,7 @@
             display: flex;
             align-items: center;
             padding: 12px 0;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .feature-item:last-child {
@@ -169,22 +178,25 @@
         }
 
         .feature-icon.blue {
-            background: linear-gradient(135deg, #29B6F6, #0288D1);
+            background: var(--info-gradient);
+            box-shadow: 0 0 8px rgba(33, 150, 243, 0.4);
         }
 
         .feature-text {
             font-weight: 500;
             text-align: left;
             font-size: 16px;
+            color: var(--text-primary);
         }
 
         .subscription-success {
             display: none;
-            background-color: var(--light-green);
+            background-color: rgba(76, 175, 80, 0.1);
             padding: 15px;
             margin: 15px;
             border-radius: 8px;
             animation: fadeIn 0.5s ease-out;
+            border: 1px solid rgba(76, 175, 80, 0.3);
         }
 
         .subscription-success.show {
@@ -194,7 +206,7 @@
         }
 
         .success-icon {
-            background-color: var(--accent-green);
+            background-color: var(--success-color);
             color: white;
             width: 32px;
             height: 32px;
@@ -204,10 +216,11 @@
             justify-content: center;
             margin-right: 12px;
             font-size: 16px;
+            box-shadow: 0 0 8px rgba(76, 175, 80, 0.5);
         }
 
         .success-text {
-            color: #2E7D32;
+            color: var(--success-color);
             font-weight: 700;
             font-size: 20px;
         }
@@ -225,18 +238,18 @@
             margin: 15px 0;
             text-align: center;
             text-decoration: none;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
             transition: transform 0.2s, box-shadow 0.2s;
         }
         
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
         }
         
         .btn:active {
             transform: translateY(1px);
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
         }
         
         .btn i {
@@ -244,24 +257,23 @@
         }
 
         .primary-btn {
-            background: var(--tg-gradient);
+            background: var(--accent-gradient);
             margin-top: 20px;
         }
 
         .outline-btn {
-            background: white;
-            border: 2px solid var(--tg-color);
-            color: var(--tg-color);
+            background: transparent;
+            border: 2px solid var(--accent-primary);
+            color: var(--accent-primary);
         }
 
         .outline-btn:hover {
-            background: #f0f8ff;
+            background: rgba(0, 136, 204, 0.1);
         }
 
         .access-btn {
-            background: linear-gradient(135deg, #4CAF50, #2E7D32);
+            background: var(--success-gradient);
             margin-top: 20px;
-            animation: pulse 2s infinite;
         }
 
         @keyframes fadeIn {
@@ -279,11 +291,12 @@
         .spinner {
             width: 48px;
             height: 48px;
-            border: 4px solid rgba(0, 136, 204, 0.2);
+            border: 4px solid rgba(0, 136, 204, 0.1);
             border-radius: 50%;
-            border-top-color: var(--tg-color);
+            border-top-color: var(--accent-primary);
             animation: spin 1.2s linear infinite;
             margin-bottom: 15px;
+            box-shadow: 0 0 15px rgba(0, 136, 204, 0.3);
         }
         
         @keyframes spin {
@@ -294,7 +307,7 @@
             text-align: center;
             margin-top: 20px;
             font-size: 14px;
-            color: #777;
+            color: var(--text-secondary);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -302,7 +315,7 @@
         
         .lock-footer i {
             margin-right: 8px;
-            color: #888;
+            color: var(--accent-primary);
         }
 
         /* Dashboard styles */
@@ -311,57 +324,58 @@
             margin-bottom: 20px;
             font-size: 22px;
             font-weight: 700;
-            color: #444;
+            color: var(--text-primary);
             width: 100%;
         }
         
         .card {
-            background-color: white;
+            background-color: var(--card-bg);
             border-radius: 16px;
             padding: 18px;
             margin-bottom: 25px;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-            border: 1px solid rgba(0, 0, 0, 0.04);
+            box-shadow: var(--card-shadow);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             transform: translateY(0);
             transition: transform 0.3s ease;
         }
         
         .card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
         }
         
-        .text {
-            font-size: 16px;
-            line-height: 1.6;
-            color: #555;
-            margin-bottom: 15px;
-        }
-        
-        .highlight-text {
-            background-color: var(--light-blue);
+        .info-block {
+            border-left: 4px solid var(--accent-primary);
+            background-color: rgba(0, 136, 204, 0.1);
             padding: 12px;
             border-radius: 8px;
             margin-bottom: 15px;
+            text-align: left;
             animation: fadeIn 1s ease-out;
         }
         
-        .emoji-text {
-            font-size: 18px;
-            font-weight: 500;
-            margin-bottom: 15px;
-            color: #444;
+        .info-block p {
+            font-size: 15px;
+            line-height: 1.5;
+            color: var(--text-primary);
+            margin-bottom: 8px;
         }
         
-        .emoji-icon {
-            font-size: 24px;
+        .info-block:last-child p {
+            margin-bottom: 0;
+        }
+        
+        .info-block .emoji-icon {
+            font-size: 18px;
             margin-right: 8px;
             vertical-align: middle;
         }
         
         /* Team selection styles */
         .title-highlight {
-            color: var(--predictor-color);
+            color: var(--accent-secondary);
+            text-shadow: 0 0 8px rgba(255, 107, 107, 0.4);
         }
 
         .team-selection-container {
@@ -379,7 +393,7 @@
         .team-label {
             font-weight: 600;
             margin-bottom: 8px;
-            color: #444;
+            color: var(--text-primary);
             text-align: left;
             display: block;
         }
@@ -387,53 +401,60 @@
         .select-control {
             width: 100%;
             padding: 14px;
-            border: 1px solid #ddd;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 10px;
             font-size: 16px;
             transition: all 0.3s;
-            background-color: white;
+            background-color: rgba(10, 25, 41, 0.8);
+            color: var(--text-primary);
             appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
             background-repeat: no-repeat;
             background-position: right 10px center;
             background-size: 16px;
         }
         
         .select-control:focus {
-            border-color: var(--tg-color);
+            border-color: var(--accent-primary);
             box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.2);
             outline: none;
+        }
+
+        .select-control option {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
         }
 
         .versus-badge {
             font-size: 22px;
             font-weight: 700;
-            color: var(--accent-blue);
+            color: white;
             min-width: 50px;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 50px;
             width: 50px;
-            background-color: var(--light-blue);
+            background: var(--accent-gradient);
             border-radius: 50%;
+            box-shadow: var(--neon-shadow);
         }
 
         .helper-note {
             display: flex;
             align-items: center;
             font-size: 14px;
-            color: #666;
+            color: var(--text-secondary);
             margin-top: 15px;
-            background-color: #f8f9fa;
+            background-color: rgba(255, 255, 255, 0.05);
             padding: 12px;
             border-radius: 8px;
-            border-left: 3px solid #ffc107;
+            border-left: 3px solid var(--warning-color);
         }
 
         .helper-note i {
             margin-right: 8px;
-            color: #ffc107;
+            color: var(--warning-color);
         }
 
         /* Odds entry styles */
@@ -451,22 +472,28 @@
         .odds-label {
             font-weight: 600;
             margin-bottom: 8px;
-            color: #444;
+            color: var(--text-primary);
             text-align: left;
             display: block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
 
         .input-control {
             width: 100%;
             padding: 14px;
-            border: 1px solid #ddd;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 10px;
             font-size: 16px;
             transition: all 0.3s;
+            background-color: rgba(10, 25, 41, 0.8);
+            color: var(--text-primary);
         }
         
         .input-control:focus {
-            border-color: var(--tg-color);
+            border-color: var(--accent-primary);
             box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.2);
             outline: none;
         }
@@ -483,21 +510,21 @@
         }
 
         .back-btn {
-            background: white;
-            border: 2px solid #ccc;
-            color: #666;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text-primary);
         }
 
         .back-btn:hover {
-            background: #f9f9f9;
+            background: rgba(255, 255, 255, 0.15);
         }
 
         .next-btn {
-            background: var(--tg-gradient);
+            background: var(--accent-gradient);
         }
 
         .predict-btn {
-            background: linear-gradient(135deg, #FF9800, #F57C00);
+            background: var(--accent-secondary-gradient);
         }
         
         /* Analysis page styles */
@@ -521,8 +548,9 @@
             height: 100%;
             border-radius: 50%;
             border: 6px solid rgba(0, 136, 204, 0.1);
-            border-top-color: var(--tg-color);
+            border-top-color: var(--accent-primary);
             animation: spin 2s linear infinite;
+            box-shadow: 0 0 15px rgba(0, 136, 204, 0.3);
         }
         
         .analysis-ring:nth-child(2) {
@@ -543,24 +571,29 @@
         }
         
         .analysis-message-container {
-            background-color: #f8f9fa;
+            background-color: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
             padding: 15px;
             width: 100%;
             max-height: 180px;
             overflow-y: auto;
             text-align: left;
-            border: 1px solid #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             margin-top: 20px;
         }
         
         .analysis-message {
             margin-bottom: 8px;
             padding: 8px 0;
-            border-bottom: 1px dashed #e0e0e0;
+            border-bottom: 1px dashed rgba(255, 255, 255, 0.1);
             opacity: 0;
             transform: translateY(10px);
             transition: opacity 0.3s, transform 0.3s;
+        }
+        
+        .analysis-message.active {
+            opacity: 1;
+            transform: translateY(0);
         }
         
         .analysis-message:last-child {
@@ -568,7 +601,7 @@
         }
         
         .analysis-message i {
-            color: var(--tg-color);
+            color: var(--accent-primary);
             margin-right: 8px;
         }
 
@@ -577,20 +610,22 @@
             font-size: 24px;
             font-weight: 700;
             margin-bottom: 20px;
-            color: #333;
+            color: var(--text-primary);
             padding: 10px 15px;
-            background-color: var(--light-blue);
+            background: rgba(0, 136, 204, 0.1);
             border-radius: 10px;
             display: inline-block;
+            border: 1px solid rgba(0, 136, 204, 0.3);
+            box-shadow: 0 0 10px rgba(0, 136, 204, 0.2);
         }
 
         .result-card {
-            background-color: white;
+            background-color: var(--card-bg);
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-            border-top: 4px solid var(--tg-color);
+            box-shadow: var(--card-shadow);
+            border-top: 4px solid var(--accent-primary);
         }
         
         .card-header {
@@ -598,13 +633,13 @@
             align-items: center;
             margin-bottom: 15px;
             padding-bottom: 10px;
-            border-bottom: 1px solid #f0f0f0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         .card-icon {
             width: 36px;
             height: 36px;
-            background: var(--tg-gradient);
+            background: var(--accent-gradient);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -612,12 +647,13 @@
             color: white;
             margin-right: 12px;
             flex-shrink: 0;
+            box-shadow: var(--neon-shadow);
         }
         
         .card-title {
             font-size: 18px;
             font-weight: 700;
-            color: var(--dark-blue);
+            color: var(--text-primary);
         }
         
         .prediction-content {
@@ -627,7 +663,7 @@
         }
         
         .scores-container {
-            border-right: 1px solid #eee;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
             padding-right: 15px;
         }
         
@@ -644,28 +680,30 @@
         
         .score-box {
             padding: 15px 10px;
-            background-color: #f8f9fa;
+            background-color: rgba(255, 255, 255, 0.05);
             border-radius: 8px;
             text-align: center;
-            border: 1px solid #eaeaea;
-            transition: transform 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
         
         .score-box:hover {
             transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            background-color: rgba(255, 255, 255, 0.1);
         }
         
         .score-result {
             font-size: 24px;
             font-weight: 800;
-            color: var(--predictor-color);
+            color: var(--accent-secondary);
             margin-bottom: 5px;
+            text-shadow: 0 0 8px rgba(255, 107, 107, 0.4);
         }
         
         .score-confidence {
             font-size: 14px;
-            color: #666;
+            color: var(--text-secondary);
         }
         
         .prediction-section {
@@ -675,7 +713,7 @@
         .section-title {
             font-size: 16px;
             font-weight: 600;
-            color: #555;
+            color: var(--text-primary);
             margin-bottom: 10px;
             display: flex;
             align-items: center;
@@ -683,59 +721,65 @@
         
         .section-title i {
             margin-right: 8px;
-            color: var(--accent-blue);
+            color: var(--accent-primary);
         }
         
         .winner-section {
-            background: var(--light-blue);
+            background: rgba(33, 150, 243, 0.1);
             border-radius: 8px;
             padding: 15px;
             text-align: center;
             margin-top: 15px;
+            border: 1px solid rgba(33, 150, 243, 0.3);
+            box-shadow: 0 0 10px rgba(33, 150, 243, 0.2);
         }
         
         .winner-label {
             font-weight: 600;
-            color: #555;
+            color: var(--text-primary);
             margin-bottom: 5px;
         }
         
         .winner-team {
             font-size: 22px;
             font-weight: 800;
-            color: var(--accent-blue);
+            color: var(--info-color);
             margin-bottom: 5px;
+            text-shadow: 0 0 8px rgba(33, 150, 243, 0.4);
         }
         
         .winner-probability {
             font-size: 14px;
-            color: #666;
+            color: var(--text-secondary);
         }
         
         .goals-section {
-            background-color: var(--light-orange);
+            background: rgba(255, 152, 0, 0.1);
             border-radius: 8px;
             padding: 15px;
             text-align: center;
             margin-top: 15px;
+            border: 1px solid rgba(255, 152, 0, 0.3);
+            box-shadow: 0 0 10px rgba(255, 152, 0, 0.2);
         }
         
         .goals-label {
             font-weight: 600;
-            color: #555;
+            color: var(--text-primary);
             margin-bottom: 5px;
         }
         
         .goals-value {
             font-size: 28px;
             font-weight: 800;
-            color: var(--accent-orange);
+            color: var(--warning-color);
+            text-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
         }
         
         .goals-suggestion {
             margin-top: 5px;
             font-size: 14px;
-            color: #666;
+            color: var(--text-secondary);
             font-style: italic;
         }
 
@@ -781,7 +825,7 @@
             .scores-container {
                 border-right: none;
                 padding-right: 0;
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
                 padding-bottom: 15px;
             }
             
@@ -867,79 +911,6 @@
         </div>
         
         <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
-        
-        <div class="card">
-            <h2 class="subtitle">🏆 Bienvenue dans l'univers FIFA 4x4</h2>
-            
-            <div class="highlight-text">
-                <p><span class="emoji-icon">🎮</span> FIFA 4x4 est un jeu virtuel de football qui simule des matchs entre les meilleures équipes du monde.</p>
-            </div>
-            
-            <p class="emoji-text"><span class="emoji-icon">🧠</span> Notre système d'intelligence artificielle analyse des milliers de paramètres de matchs pour générer des prédictions précises.</p>
-            
-            <p class="emoji-text"><span class="emoji-icon">📊</span> Accédez à des statistiques détaillées, des tendances historiques et des analyses de confrontations directes.</p>
-            
-            <p class="emoji-text"><span class="emoji-icon">🔮</span> Obtenez un avantage compétitif sur vos paris grâce à nos prédictions basées sur des données réelles!</p>
-        </div>
-        
-        <button id="start-prediction" class="btn predict-btn">
-            <i class="fas fa-play"></i> Commencer une prédiction
-        </button>
-    </div>
-
-    <!-- Page 3: Sélection des équipes -->
-    <div id="teams-selection-page" class="page">
-        <div class="logo-container">
-            <div class="logo">
-                <i class="fas fa-users"></i>
-            </div>
-        </div>
-        
-        <h1 class="main-title">Sélection des <span class="title-highlight">équipes</span></h1>
-        
-        <div class="card">
-            <p class="text">Sélectionnez les deux équipes qui s'affrontent:</p>
-            
-            <div class="team-selection-container">
-                <div class="team-select">
-                    <label class="team-label" for="team1">Équipe 1</label>
-                    <select id="team1" class="select-control">
-                        <option value="" disabled selected>Sélectionner une équipe</option>
-                    </select>
-                </div>
-                
-                <div class="versus-badge">VS</div>
-                
-                <div class="team-select">
-                    <label class="team-label" for="team2">Équipe 2</label>
-                    <select id="team2" class="select-control">
-                        <option value="" disabled selected>Sélectionner une équipe</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div class="helper-note">
-                <i class="fas fa-info-circle"></i> 
-                Important: Vérifiez que vous avez sélectionné les bonnes équipes pour une prédiction précise.
-            </div>
-        </div>
-        <i class="fas fa-arrow-right"></i> Continuer vers l'application
-       </button>
-       
-       <div class="lock-footer">
-           <i class="fas fa-lock"></i> Réservé aux membres
-       </div>
-   </div>
-
-   <!-- Page 2: Tableau de bord / Accueil -->
-   <div id="dashboard-page" class="page">
-       <div class="logo-container">
-           <div class="logo">
-               <i class="fas fa-futbol"></i>
-           </div>
-       </div>
-       
-       <h1 class="main-title">FIFA 4x4 <span>Predictor</span></h1>
        
        <div class="card">
            <h2 class="subtitle">🏆 Bienvenue dans l'univers FIFA 4x4</h2>
@@ -1071,14 +1042,9 @@
            
            <div class="analysis-container">
                <div class="analysis-visual">
-                   <div class="analysis-cube">
-                       <div class="cube-face face-front"></div>
-                       <div class="cube-face face-back"></div>
-                       <div class="cube-face face-right"></div>
-                       <div class="cube-face face-left"></div>
-                       <div class="cube-face face-top"></div>
-                       <div class="cube-face face-bottom"></div>
-                   </div>
+                   <div class="analysis-ring"></div>
+                   <div class="analysis-ring"></div>
+                   <div class="analysis-ring"></div>
                </div>
                
                <div class="analysis-message-container" id="analysis-messages">

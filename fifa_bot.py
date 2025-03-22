@@ -86,7 +86,7 @@ async def check_subscription_command(update: Update, context: ContextTypes.DEFAU
 async def webapp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Ouvre la WebApp pour les prédictions FIFA 4x4"""
     # URL de votre WebApp - remplacez par l'URL réelle après déploiement
-    webapp_url = "https://votre-username.github.io/fifa-predictor-bot/"
+    webapp_url = "webapp_url = "https://fifa-predictor-ui.onrender.com"
     
     webapp_button = InlineKeyboardButton(
         text="📊 Ouvrir l'application de prédiction",

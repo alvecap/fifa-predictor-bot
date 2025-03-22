@@ -1,8 +1,21 @@
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from collections import defaultdict, Counter
+import logging
+from datetime import datetime
+import unicodedata
+import re
+from config import CREDENTIALS_FILE, SPREADSHEET_ID
+
+# Configuration du logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 def normalize_team_name(team_name):
     """Normalise le nom d'une équipe en supprimant les accents et en standardisant le format"""
-    import unicodedata
-    import re
-    
     if not team_name:
         return ""
     
@@ -14,6 +27,7 @@ def normalize_team_name(team_name):
     replacements = {
         "forest": "nottingham forest",
         "foret de nottingham": "nottingham forest",
+        "foret": "nottingham forest",
         "nottinghamforest": "nottingham forest",
         "man utd": "manchester united",
         "man united": "manchester united",
@@ -33,6 +47,80 @@ def normalize_team_name(team_name):
             return value
     
     return team_name
+
+def connect_to_sheets():
+    """Établit la connexion avec Google Sheets"""
+    try:
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+        client = gspread.authorize(credentials)
+        return client.open_by_key(SPREADSHEET_ID)
+    except Exception as e:
+        logger.error(f"Erreur de connexion à Google Sheets: {e}")
+        raise
+
+def get_all_matches_data():
+    """Récupère les données des matchs depuis Google Sheets"""
+    try:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        # Récupérer la feuille principale
+        main_sheet = spreadsheet.worksheet("Tous les matchs")
+        
+        # Récupérer toutes les valeurs brutes
+        all_values = main_sheet.get_all_values()
+        
+        # Déterminer la ligne d'en-tête (ligne 3 normalement)
+        header_row_index = 2  # 0-based index pour la ligne 3
+        
+        # S'assurer qu'il y a assez de lignes
+        if len(all_values) <= header_row_index:
+            logger.warning("Pas assez de données dans la feuille")
+            return []
+        
+        # Récupérer les en-têtes
+        headers = all_values[header_row_index]
+        
+        # Créer l'index des colonnes importantes
+        column_indices = {
+            'match_id': next((i for i, h in enumerate(headers) if 'Match ID' in h or 'match' in h.lower()), None),
+            'team_home': next((i for i, h in enumerate(headers) if 'Domicile' in h), None),
+            'team_away': next((i for i, h in enumerate(headers) if 'Extérieur' in h), None),
+            'score_final': next((i for i, h in enumerate(headers) if 'Final' in h), None),
+            'score_1ere': next((i for i, h in enumerate(headers) if '1ère' in h or '1ere' in h), None)
+        }
+        
+        # Vérifier que les colonnes essentielles sont présentes
+        missing_columns = [k for k, v in column_indices.items() if v is None]
+        if missing_columns:
+            logger.warning(f"Colonnes manquantes: {missing_columns}")
+            logger.warning(f"En-têtes disponibles: {headers}")
+            return []
+        
+        # Extraire les données
+        matches = []
+        for i in range(header_row_index + 1, len(all_values)):
+            row = all_values[i]
+            if len(row) <= max(column_indices.values()):
+                continue  # Ignorer les lignes trop courtes
+            
+            match = {
+                'match_id': row[column_indices['match_id']] if column_indices['match_id'] < len(row) else '',
+                'team_home': row[column_indices['team_home']] if column_indices['team_home'] < len(row) else '',
+                'team_away': row[column_indices['team_away']] if column_indices['team_away'] < len(row) else '',
+                'score_final': row[column_indices['score_final']] if column_indices['score_final'] < len(row) else '',
+                'score_1ere': row[column_indices['score_1ere']] if column_indices['score_1ere'] < len(row) else ''
+            }
+            
+            if match['team_home'] and match['team_away']:
+                matches.append(match)
+        
+        logger.info(f"Récupération de {len(matches)} matchs réussie")
+        return matches
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des données de matchs: {e}")
+        return []
 
 def get_direct_confrontations(matches, team1, team2):
     """Récupère l'historique des confrontations directes entre deux équipes"""
@@ -69,7 +157,7 @@ def get_all_teams():
     return sorted(list(teams))
 
 def get_team_statistics(matches):
-    """Calcule les statistiques pour chaque équipe"""
+    """Calcule les statistiques pour chaque équipe avec une meilleure analyse des tendances à buts élevés"""
     team_stats = {}
     
     for match in matches:
@@ -138,12 +226,12 @@ def get_team_statistics(matches):
             
             # Mise à jour de la moyenne de buts
             team_stats[team_home]['avg_total_goals'] = (team_stats[team_home]['avg_total_goals'] * 
-                                                       (team_stats[team_home]['home_matches'] - 1) + 
-                                                       total_goals) / team_stats[team_home]['home_matches']
+                                                        (team_stats[team_home]['home_matches'] - 1) + 
+                                                        total_goals) / team_stats[team_home]['home_matches']
             
             team_stats[team_away]['avg_total_goals'] = (team_stats[team_away]['avg_total_goals'] * 
-                                                       (team_stats[team_away]['away_matches'] - 1) + 
-                                                       total_goals) / team_stats[team_away]['away_matches']
+                                                        (team_stats[team_away]['away_matches'] - 1) + 
+                                                        total_goals) / team_stats[team_away]['away_matches']
             
         except (ValueError, IndexError, ZeroDivisionError):
             pass
@@ -229,3 +317,48 @@ def get_common_scores(scores_list, top_n=5):
     # Trier par fréquence ajustée et prendre les top_n plus fréquents
     most_common = sorted(enhanced_scores, key=lambda x: x[2], reverse=True)[:top_n]
     return most_common
+
+def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None, prediction_result=None):
+    """Enregistre les prédictions demandées par les utilisateurs pour analyse future"""
+    try:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        # Récupérer ou créer la feuille de logs
+        try:
+            log_sheet = spreadsheet.worksheet("Logs des prédictions")
+        except gspread.exceptions.WorksheetNotFound:
+            log_sheet = spreadsheet.add_worksheet(title="Logs des prédictions", rows=1000, cols=10)
+            # Ajouter les en-têtes
+            log_sheet.update('A1:I1', [['Date', 'User ID', 'Username', 'Équipe 1', 'Équipe 2', 
+                                        'Cote 1', 'Cote 2', 'Résultats prédits', 'Statut']])
+        
+        # Formater les résultats de prédiction
+        prediction_str = "N/A"
+        if prediction_result:
+            try:
+                prediction_str = str(prediction_result)
+            except:
+                prediction_str = "Format non supporté"
+        
+        # Obtenir la date actuelle
+        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Ajouter l'entrée de log
+        log_sheet.append_row([
+            current_date,
+            str(user_id),
+            username or "Inconnu",
+            team1,
+            team2,
+            str(odds1) if odds1 else "N/A",
+            str(odds2) if odds2 else "N/A",
+            prediction_str,
+            "Complété"
+        ])
+        
+        logger.info(f"Log enregistré pour la prédiction {team1} vs {team2}")
+        return True
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement du log: {e}")
+        return False

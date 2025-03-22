@@ -30,25 +30,61 @@ class MatchPredictor:
         else:
             logger.warning("Aucune donnée de match disponible!")
 
-    def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
-        """Prédit le résultat d'un match entre team1 et team2"""
-        logger.info(f"Analyse du match: {team1} vs {team2}")
-        
-        # Vérifier si les équipes existent dans nos données
-        if not self.team_stats:
-            logger.error("Statistiques d'équipes non disponibles")
-            return None
+    def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None):
+    """Prédit le résultat d'un match entre team1 et team2"""
+    logger.info(f"Analyse du match: {team1} vs {team2}")
+    
+    # Vérifier si les équipes existent dans nos données
+    if not self.team_stats:
+        logger.error("Statistiques d'équipes non disponibles")
+        return None
+    
+    # Fonction pour trouver la meilleure correspondance pour une équipe
+    def find_matching_team(team_name):
+        # Vérifier d'abord si le nom exact existe
+        if team_name in self.team_stats:
+            return team_name
             
-        if team1 not in self.team_stats:
-            logger.warning(f"Équipe '{team1}' non trouvée dans les données historiques")
-            return {"error": f"Équipe '{team1}' non trouvée dans notre base de données"}
+        # Sinon, essayer de trouver une correspondance approximative
+        team_lower = team_name.lower()
+        best_match = None
         
-        if team2 not in self.team_stats:
-            logger.warning(f"Équipe '{team2}' non trouvée dans les données historiques")
-            return {"error": f"Équipe '{team2}' non trouvée dans notre base de données"}
+        for stored_team in self.team_stats.keys():
+            stored_lower = stored_team.lower()
+            
+            # Correspondance exacte insensible à la casse
+            if stored_lower == team_lower:
+                return stored_team
+                
+            # Correspondance partielle
+            if team_lower in stored_lower or stored_lower in team_lower:
+                best_match = stored_team
+                break
         
-        # Récupérer les confrontations directes
-        direct_matches = get_direct_confrontations(self.matches, team1, team2)
+        return best_match
+    
+    # Trouver les meilleures correspondances
+    matched_team1 = find_matching_team(team1)
+    matched_team2 = find_matching_team(team2)
+    
+    # Vérifier si les correspondances ont été trouvées
+    if not matched_team1:
+        logger.warning(f"Équipe '{team1}' non trouvée dans les données historiques")
+        return {"error": f"Équipe '{team1}' non trouvée dans notre base de données"}
+        
+    if not matched_team2:
+        logger.warning(f"Équipe '{team2}' non trouvée dans les données historiques")
+        return {"error": f"Équipe '{team2}' non trouvée dans notre base de données"}
+    
+    # Utiliser les équipes correspondantes trouvées
+    logger.info(f"Correspondances trouvées: {team1} -> {matched_team1}, {team2} -> {matched_team2}")
+    team1 = matched_team1
+    team2 = matched_team2
+    
+    # Récupérer les confrontations directes
+    direct_matches = get_direct_confrontations(self.matches, team1, team2)
+    
+    # Le reste de la fonction reste inchangé...
         
         # Initialiser les résultats de prédiction
         prediction_results = {

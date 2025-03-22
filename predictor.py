@@ -350,27 +350,26 @@ class MatchPredictor:
         
         if odds1 and odds2:
             # Avec cotes: 50% cotes, 30% stats, 20% confrontations directes
-            win_prob_team1 = (market_prob_team1 * 0.5) + 
-                            ((final_team1_power / (final_team1_power + final_team2_power)) * 0.8 * 0.3) + 
-                            (direct_win_prob_team1 * 0.2)
+            market_factor = 0.5  # facteur pour les cotes du marché
+            stats_factor = 0.3   # facteur pour les statistiques d'équipe
+            direct_factor = 0.2  # facteur pour les confrontations directes
             
-            win_prob_team2 = (market_prob_team2 * 0.5) + 
-                            ((final_team2_power / (final_team1_power + final_team2_power)) * 0.8 * 0.3) + 
-                            (direct_win_prob_team2 * 0.2)
+            # Calcul pour l'équipe 1
+            stats_ratio1 = final_team1_power / (final_team1_power + final_team2_power)
+            win_prob_team1 = (market_prob_team1 * market_factor) + (stats_ratio1 * 0.8 * stats_factor) + (direct_win_prob_team1 * direct_factor)
             
-            draw_prob = (market_prob_draw * 0.5) + 
-                       (0.2 * 0.3) +  # 20% de chance de match nul basé sur les stats
-                       (direct_draw_prob * 0.2)
+            # Calcul pour l'équipe 2
+            stats_ratio2 = final_team2_power / (final_team1_power + final_team2_power)
+            win_prob_team2 = (market_prob_team2 * market_factor) + (stats_ratio2 * 0.8 * stats_factor) + (direct_win_prob_team2 * direct_factor)
+            
+            # Calcul pour le match nul
+            draw_prob = (market_prob_draw * market_factor) + (0.2 * stats_factor) + (direct_draw_prob * direct_factor)
         else:
             # Sans cotes: 60% stats, 40% confrontations directes
-            win_prob_team1 = ((final_team1_power / (final_team1_power + final_team2_power)) * 0.8 * 0.6) + 
-                            (direct_win_prob_team1 * 0.4)
-            
-            win_prob_team2 = ((final_team2_power / (final_team1_power + final_team2_power)) * 0.8 * 0.6) + 
-                            (direct_win_prob_team2 * 0.4)
-            
-            draw_prob = (0.2 * 0.6) +  # 20% de chance de match nul basé sur les stats
-                       (direct_draw_prob * 0.4)
+            stats_ratio = final_team1_power / (final_team1_power + final_team2_power)
+            win_prob_team1 = (stats_ratio * 0.8 * 0.6) + (direct_win_prob_team1 * 0.4)
+            win_prob_team2 = ((1 - stats_ratio) * 0.8 * 0.6) + (direct_win_prob_team2 * 0.4)
+            draw_prob = (0.2 * 0.6) + (direct_draw_prob * 0.4)
         
         # Normaliser pour que la somme = 1
         total_prob = win_prob_team1 + win_prob_team2 + draw_prob
@@ -601,6 +600,7 @@ class MatchPredictor:
         else:
             confidence_factors.append(50)
         
+        # Facteur 3: Présence de cotes (indique une analyse supplémentaire)
         # Facteur 3: Présence de cotes (indique une analyse supplémentaire)
         if odds1 and odds2:
             # Analyser si les cotes sont cohérentes avec notre analyse des confrontations directes

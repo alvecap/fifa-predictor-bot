@@ -31,30 +31,41 @@ SPREADSHEET_ID = get_env_variable('SPREADSHEET_ID', '')
 MAX_PREDICTIONS_HALF_TIME = int(get_env_variable('MAX_PREDICTIONS_HALF_TIME', 3))
 MAX_PREDICTIONS_FULL_TIME = int(get_env_variable('MAX_PREDICTIONS_FULL_TIME', 3))
 
+# Configuration du canal officiel
+OFFICIAL_CHANNEL = "@alvecapital1"
+
+# États pour la conversation
+TEAM_INPUT = 1
+ODDS_INPUT = 2
+ENTERING_ODDS = 3
+
 # Messages du bot
 WELCOME_MESSAGE = """
 👋 Bienvenue sur FIFA 4x4 Predictor!
 
 Je vous aide à prédire les résultats de matchs de football FIFA 4x4 en me basant sur des données historiques.
 
+⚠️ Pour utiliser toutes les fonctionnalités, vous devez être abonné à notre canal {channel}.
+
 Pour obtenir une prédiction, utilisez la commande:
 /predict Équipe1 vs Équipe2
 
 Exemple: /predict Manchester United vs Chelsea
-"""
+""".format(channel=OFFICIAL_CHANNEL)
 
 HELP_MESSAGE = """
 🔮 *Commandes disponibles*:
 
-/start - Démarrer le bot
+/start - Démarrer le bot et vérifier l'abonnement
 /help - Afficher l'aide
 /predict [Équipe1] vs [Équipe2] - Obtenir une prédiction de match
 /odds [Équipe1] vs [Équipe2] [cote1] [cote2] - Prédiction avec les cotes
+/teams - Voir toutes les équipes disponibles
+/check - Vérifier l'abonnement au canal
 
-Exemple: /predict Manchester United vs Chelsea
-Exemple: /odds Manchester United vs Chelsea 1.8 3.5
-"""
+*Exemples:*
+/predict Manchester United vs Chelsea
+/odds Manchester United vs Chelsea 1.8 3.5
 
-# États pour la conversation
-TEAM_INPUT = 1
-ODDS_INPUT = 2
+⚠️ L'abonnement au canal {channel} est requis pour utiliser ces fonctionnalités.
+""".format(channel=OFFICIAL_CHANNEL)

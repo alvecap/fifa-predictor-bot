@@ -32,6 +32,10 @@ class MatchPredictor:
 
     def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
         """Prédit le résultat d'un match entre team1 et team2"""
+        # Nettoyer les noms d'équipes (enlever les underscores au début, les espaces en trop, etc.)
+        team1 = team1.strip().lstrip('_')
+        team2 = team2.strip().lstrip('_')
+        
         logger.info(f"Analyse du match: {team1} vs {team2}")
         
         # Vérifier si les équipes existent dans nos données

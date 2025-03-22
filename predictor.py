@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class MatchPredictor:
     def __init__(self):
-        """Initialise le prédicteur de match"""
+        """Initialise le prédicteur de match avec une meilleure analyse statistique"""
         # Charger les données de matchs
         self.matches = get_all_matches_data()
         self.team_stats = None
@@ -31,47 +31,22 @@ class MatchPredictor:
             self.calculate_advanced_stats()
         else:
             logger.warning("Aucune donnée de match disponible!")
-
+    
     def calculate_advanced_stats(self):
-        """Calcule des statistiques avancées pour les équipes"""
+        """Calcule des statistiques avancées pour améliorer les prédictions"""
         self.team_power_ratings = {}
         self.team_forms = {}
-        self.avg_goals_per_match = 0
-        total_matches = 0
-        total_goals = 0
         
-        # Calculer la moyenne globale de buts par match
-        for match in self.matches:
-            score_final = match.get('score_final', '')
-            if score_final:
-                try:
-                    parts = score_final.split(':')
-                    home_goals = int(parts[0])
-                    away_goals = int(parts[1])
-                    total_goals += home_goals + away_goals
-                    total_matches += 1
-                except (ValueError, IndexError):
-                    pass
-        
-        if total_matches > 0:
-            self.avg_goals_per_match = total_goals / total_matches
-        
-        # Calculer les statistiques par équipe
         for team_name, stats in self.team_stats.items():
-            # Calculer le ratio de victoires
-            home_matches = stats.get('home_matches', 0)
-            away_matches = stats.get('away_matches', 0)
-            total_team_matches = home_matches + away_matches
-            
-            if total_team_matches > 0:
-                home_wins = stats.get('home_wins', 0)
-                away_wins = stats.get('away_wins', 0)
-                total_wins = home_wins + away_wins
-                win_ratio = total_wins / total_team_matches
+            # Calculer le ratio de victoires total
+            total_matches = stats.get('home_matches', 0) + stats.get('away_matches', 0)
+            if total_matches > 0:
+                total_wins = stats.get('home_wins', 0) + stats.get('away_wins', 0)
+                win_ratio = total_wins / total_matches
             else:
                 win_ratio = 0.0
             
-            # Calculer la différence de buts moyenne
+            # Calculer la différence moyenne de buts
             home_goals_for = stats.get('home_goals_for', [])
             home_goals_against = stats.get('home_goals_against', [])
             away_goals_for = stats.get('away_goals_for', [])
@@ -87,16 +62,16 @@ class MatchPredictor:
             else:
                 goal_diff = 0.0
             
-            # Calculer un score de puissance
-            power_rating = (win_ratio * 70) + (goal_diff * 10)
+            # Calculer un score de puissance basé sur le ratio de victoires et la différence de buts
+            power_rating = (win_ratio * 70) + (goal_diff * 15)
             self.team_power_ratings[team_name] = max(0, min(100, power_rating))
             
-            # Calculer la forme récente
-            self.team_forms[team_name] = self.calculate_form(team_name)
-    
-    def calculate_form(self, team_name, last_n=5):
-        """Calcule la forme récente d'une équipe (derniers matchs)"""
-        team_results = []
+            # Calculer la forme récente (basée sur les 5 derniers matchs si disponibles)
+            self.team_forms[team_name] = self.calculate_team_form(team_name)
+
+    def calculate_team_form(self, team_name, last_n=5):
+        """Calcule la forme récente d'une équipe basée sur ses derniers résultats"""
+        team_matches = []
         
         # Récupérer tous les matchs impliquant cette équipe
         for match in self.matches:
@@ -128,38 +103,39 @@ class MatchPredictor:
                     else:
                         result = 'D'  # Match nul
                 
-                team_results.append(result)
+                team_matches.append(result)
             except (ValueError, IndexError):
                 continue
         
-        # Prendre les N derniers matchs
-        recent_results = team_results[:last_n]
+        # Prendre seulement les N derniers matchs
+        recent_matches = team_matches[:last_n]
         
         # Calculer le score de forme
         form_score = 0
-        max_score = 0
-        
-        for i, result in enumerate(recent_results):
-            # Plus un match est récent, plus il pèse dans la forme
-            weight = 1.0 - (i / (last_n * 2))
-            max_score += weight * 3  # 3 points pour une victoire
+        if recent_matches:
+            for i, result in enumerate(recent_matches):
+                # Pondération décroissante (les matchs plus récents ont plus d'importance)
+                weight = 1 - (i / (2 * last_n))
+                
+                if result == 'W':
+                    form_score += 3 * weight
+                elif result == 'D':
+                    form_score += 1 * weight
             
-            if result == 'W':
-                form_score += 3 * weight
-            elif result == 'D':
-                form_score += 1 * weight
-        
-        # Normaliser entre 0 et 100
-        if max_score > 0:
-            form_score = (form_score / max_score) * 100
+            # Normaliser sur 100
+            max_possible_score = sum([(3 * (1 - (i / (2 * last_n)))) for i in range(len(recent_matches))])
+            if max_possible_score > 0:
+                form_score = (form_score / max_possible_score) * 100
+            else:
+                form_score = 50
         else:
             form_score = 50  # Valeur par défaut
         
         return round(form_score)
 
     def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
-        """Prédit le résultat d'un match entre team1 et team2"""
-        # Nettoyer les noms d'équipes (enlever les underscores, espaces en trop, etc.)
+        """Prédit le résultat d'un match entre team1 et team2 avec cotes améliorées"""
+        # Nettoyer les noms d'équipes (enlever les underscores au début, les espaces en trop, etc.)
         team1 = team1.strip().lstrip('_')
         team2 = team2.strip().lstrip('_')
         
@@ -201,76 +177,39 @@ class MatchPredictor:
             "confidence_level": 0
         }
         
-        # 1. Analyse des confrontations directes (avec FORTE pondération)
+        # 1. Analyse des confrontations directes
         direct_final_scores = []
         direct_first_half = []
-        direct_results = {"team1_wins": 0, "team2_wins": 0, "draws": 0}
         
+        # Analyser les confrontations directes récentes avec plus de poids
         for i, match in enumerate(direct_matches):
             home = match.get('team_home', '')
             away = match.get('team_away', '')
             score_final = match.get('score_final', '')
             score_1ere = match.get('score_1ere', '')
             
-            # Donner plus de poids aux matchs récents
-            recency_weight = 2.0 + ((len(direct_matches) - i) / len(direct_matches)) if direct_matches else 1.0
+            # Donner plus de poids aux matchs récents (basé sur leur position dans la liste)
+            recency_weight = 1.0 + (0.1 * (len(direct_matches) - i)) / len(direct_matches) if direct_matches else 1.0
             
             if score_final:
-                # Normaliser pour que team1 soit toujours à gauche
+                # Si on veut normaliser pour que team1 soit toujours à gauche
                 if home == team1:
                     direct_final_scores.append((score_final, recency_weight))
-                    
-                    # Compter les résultats
-                    parts = score_final.split(':')
-                    if len(parts) == 2:
-                        home_goals = int(parts[0])
-                        away_goals = int(parts[1])
-                        if home_goals > away_goals:
-                            direct_results["team1_wins"] += 1
-                        elif home_goals < away_goals:
-                            direct_results["team2_wins"] += 1
-                        else:
-                            direct_results["draws"] += 1
-                    
                     if score_1ere:
                         direct_first_half.append((score_1ere, recency_weight))
                 else:
                     # Inverser le score si team1 est à l'extérieur
                     try:
                         parts = score_final.split(':')
-                        inverted_score = f"{parts[1]}:{parts[0]}"
-                        direct_final_scores.append((inverted_score, recency_weight))
-                        
-                        # Compter les résultats inversés
-                        if len(parts) == 2:
-                            home_goals = int(parts[0])
-                            away_goals = int(parts[1])
-                            if home_goals < away_goals:
-                                direct_results["team1_wins"] += 1
-                            elif home_goals > away_goals:
-                                direct_results["team2_wins"] += 1
-                            else:
-                                direct_results["draws"] += 1
+                        direct_final_scores.append((f"{parts[1]}:{parts[0]}", recency_weight))
                         
                         if score_1ere:
                             half_parts = score_1ere.split(':')
-                            inverted_half = f"{half_parts[1]}:{half_parts[0]}"
-                            direct_first_half.append((inverted_half, recency_weight))
+                            direct_first_half.append((f"{half_parts[1]}:{half_parts[0]}", recency_weight))
                     except (ValueError, IndexError):
                         pass
         
-        # Calculer les probabilités basées sur les confrontations directes
-        direct_win_prob_team1 = 0
-        direct_win_prob_team2 = 0
-        direct_draw_prob = 0
-        
-        direct_matches_count = direct_results["team1_wins"] + direct_results["team2_wins"] + direct_results["draws"]
-        if direct_matches_count > 0:
-            direct_win_prob_team1 = direct_results["team1_wins"] / direct_matches_count
-            direct_win_prob_team2 = direct_results["team2_wins"] / direct_matches_count
-            direct_draw_prob = direct_results["draws"] / direct_matches_count
-        
-        # Regrouper les scores avec leur poids
+        # Analyse des scores les plus fréquents dans les confrontations directes avec pondération
         direct_final_weights = defaultdict(float)
         for score, weight in direct_final_scores:
             direct_final_weights[score] += weight
@@ -287,98 +226,67 @@ class MatchPredictor:
         all_final_scores = []
         all_half_scores = []
         
-        # Ajouter les scores des confrontations directes avec un poids TRÈS important (x3)
+        # Ajouter les scores des confrontations directes avec leur poids
         if common_direct_final:
             for score, weight in common_direct_final[:MAX_PREDICTIONS_FULL_TIME]:
-                all_final_scores.append((score, weight * 3.0))
+                # Confrontations directes ont un poids très important (2x)
+                all_final_scores.append((score, weight * 2))
         
         if common_direct_half:
             for score, weight in common_direct_half[:MAX_PREDICTIONS_HALF_TIME]:
-                all_half_scores.append((score, weight * 3.0))
+                all_half_scores.append((score, weight * 2))
         
-        # 2. Intégration des cotes
-        # Calculer les probabilités implicites à partir des cotes
-        market_prob_team1 = 0
-        market_prob_team2 = 0
-        market_prob_draw = 0
-        
-        if odds1 and odds2:
-            implied_prob1 = 1 / odds1
-            implied_prob2 = 1 / odds2
-            
-            # Calculer la marge du bookmaker
-            margin = (implied_prob1 + implied_prob2) - 1
-            
-            # Ajuster les probabilités en enlevant la marge
-            if margin > 0:
-                implied_prob1 = implied_prob1 / (1 + margin)
-                implied_prob2 = implied_prob2 / (1 + margin)
-            
-            # Estimer la probabilité de match nul (généralement 20-30% des matchs)
-            market_prob_team1 = implied_prob1 * 0.85  # Réduire pour laisser de la place au match nul
-            market_prob_team2 = implied_prob2 * 0.85
-            market_prob_draw = 1 - market_prob_team1 - market_prob_team2
-        
-        # 3. Analyse statistique des équipes
-        # Récupérer les statistiques et forces des équipes
+        # 2. Intégration des cotes et des scores de puissance
+        # Calculer les forces relatives des équipes
         team1_power = self.team_power_ratings.get(team1, 50)
         team2_power = self.team_power_ratings.get(team2, 50)
+        
+        # Calculer les formes récentes
         team1_form = self.team_forms.get(team1, 50)
         team2_form = self.team_forms.get(team2, 50)
         
-        # Analyse des performances à domicile/extérieur
-        home_matches = self.team_stats[team1]['home_matches']
-        away_matches = self.team_stats[team2]['away_matches']
-        
-        # Calculer l'avantage à domicile
-        home_advantage = 7  # Points bonus pour l'équipe à domicile
-        
-        # Scores de puissance ajustés
-        adjusted_team1_power = team1_power + home_advantage
-        adjusted_team2_power = team2_power
-        
-        # Intégrer la forme récente (30% de l'évaluation)
-        form_weight = 0.3
-        final_team1_power = adjusted_team1_power * (1 - form_weight) + team1_form * form_weight
-        final_team2_power = adjusted_team2_power * (1 - form_weight) + team2_form * form_weight
-        
-        # 4. COMBINAISON des analyses statistiques et des cotes
-        # Déterminer les probabilités finales (50% cotes, 30% stats équipes, 20% confrontations directes)
-        win_prob_team1 = 0
-        win_prob_team2 = 0
-        draw_prob = 0
+        # Intégrer les cotes si disponibles
+        implied_prob1 = 0
+        implied_prob2 = 0
         
         if odds1 and odds2:
-            # Avec cotes: 50% cotes, 30% stats, 20% confrontations directes
-            market_factor = 0.5  # facteur pour les cotes du marché
-            stats_factor = 0.3   # facteur pour les statistiques d'équipe
-            direct_factor = 0.2  # facteur pour les confrontations directes
+            # Calculer les probabilités implicites à partir des cotes
+            implied_prob1 = 1 / odds1
+            implied_prob2 = 1 / odds2
             
-            # Calcul pour l'équipe 1
-            stats_ratio1 = final_team1_power / (final_team1_power + final_team2_power)
-            win_prob_team1 = (market_prob_team1 * market_factor) + (stats_ratio1 * 0.8 * stats_factor) + (direct_win_prob_team1 * direct_factor)
+            # Normaliser les probabilités (sum = 1)
+            total_prob = implied_prob1 + implied_prob2
+            implied_prob1 = implied_prob1 / total_prob
+            implied_prob2 = implied_prob2 / total_prob
             
-            # Calcul pour l'équipe 2
-            stats_ratio2 = final_team2_power / (final_team1_power + final_team2_power)
-            win_prob_team2 = (market_prob_team2 * market_factor) + (stats_ratio2 * 0.8 * stats_factor) + (direct_win_prob_team2 * direct_factor)
+            # Ajuster les scores de puissance basés sur les cotes
+            bookmaker_factor = 0.4  # Poids des cotes dans l'évaluation finale
             
-            # Calcul pour le match nul
-            draw_prob = (market_prob_draw * market_factor) + (0.2 * stats_factor) + (direct_draw_prob * direct_factor)
+            adjusted_team1_power = (team1_power / 100 * (1 - bookmaker_factor)) + (implied_prob1 * bookmaker_factor * 100)
+            adjusted_team2_power = (team2_power / 100 * (1 - bookmaker_factor)) + (implied_prob2 * bookmaker_factor * 100)
         else:
-            # Sans cotes: 60% stats, 40% confrontations directes
-            stats_ratio = final_team1_power / (final_team1_power + final_team2_power)
-            win_prob_team1 = (stats_ratio * 0.8 * 0.6) + (direct_win_prob_team1 * 0.4)
-            win_prob_team2 = ((1 - stats_ratio) * 0.8 * 0.6) + (direct_win_prob_team2 * 0.4)
-            draw_prob = (0.2 * 0.6) + (direct_draw_prob * 0.4)
+            # Utiliser uniquement les statistiques historiques
+            adjusted_team1_power = team1_power
+            adjusted_team2_power = team2_power
         
-        # Normaliser pour que la somme = 1
-        total_prob = win_prob_team1 + win_prob_team2 + draw_prob
-        if total_prob > 0:
-            win_prob_team1 /= total_prob
-            win_prob_team2 /= total_prob
-            draw_prob /= total_prob
+        # Tenir compte de l'avantage à domicile
+        home_advantage = 5  # 5% d'avantage pour l'équipe à domicile
+        adjusted_team1_power += home_advantage
         
-        # 5. Analyse des performances à domicile/extérieur pour les scores
+        # Tenir compte de la forme récente
+        form_factor = 0.3  # Poids de la forme récente
+        adjusted_team1_power = adjusted_team1_power * (1 - form_factor) + team1_form * form_factor
+        adjusted_team2_power = adjusted_team2_power * (1 - form_factor) + team2_form * form_factor
+        
+        # Calcul des probabilités de victoire/match nul
+        total_power = adjusted_team1_power + adjusted_team2_power
+        win_prob_team1 = adjusted_team1_power / total_power * 0.8  # 80% de chance d'avoir un vainqueur
+        win_prob_team2 = adjusted_team2_power / total_power * 0.8
+        draw_prob = 1.0 - win_prob_team1 - win_prob_team2
+        
+        # 3. Analyse des performances à domicile/extérieur
+        # Team1 à domicile
+        home_matches = self.team_stats[team1]['home_matches']
         if home_matches > 0:
             # Scores les plus fréquents à domicile
             home_scores = [f"{g_for}:{g_against}" for g_for, g_against in zip(
@@ -386,15 +294,19 @@ class MatchPredictor:
             common_home = get_common_scores(home_scores)
             
             if common_home:
+                # Pondérer en fonction de la force relative
+                power_weight = adjusted_team1_power / 100
                 for score, count, pct in common_home[:MAX_PREDICTIONS_FULL_TIME]:
-                    all_final_scores.append((score, pct * 1.5))  # x1.5 pour les tendances à domicile
+                    all_final_scores.append((score, pct * power_weight * 1.2))  # 1.2x pour favoriser les tendances à domicile
             
             # 1ère mi-temps à domicile
             common_home_half = get_common_scores(self.team_stats[team1]['home_first_half'])
             if common_home_half:
                 for score, count, pct in common_home_half[:MAX_PREDICTIONS_HALF_TIME]:
-                    all_half_scores.append((score, pct * 1.5))
+                    all_half_scores.append((score, pct * power_weight * 1.2))
         
+        # Team2 à l'extérieur
+        away_matches = self.team_stats[team2]['away_matches']
         if away_matches > 0:
             # Scores les plus fréquents à l'extérieur
             away_scores = [f"{g_for}:{g_against}" for g_for, g_against in zip(
@@ -402,12 +314,14 @@ class MatchPredictor:
             common_away = get_common_scores(away_scores)
             
             if common_away:
+                # Pondérer en fonction de la force relative
+                power_weight = adjusted_team2_power / 100
                 for score, count, pct in common_away[:MAX_PREDICTIONS_FULL_TIME]:
                     # Inverser le score car on a les stats du point de vue de l'équipe à l'extérieur
                     try:
                         parts = score.split(':')
                         inverted_score = f"{parts[1]}:{parts[0]}"
-                        all_final_scores.append((inverted_score, pct * 1.5))
+                        all_final_scores.append((inverted_score, pct * power_weight * 1.2))
                     except (ValueError, IndexError):
                         pass
             
@@ -418,11 +332,11 @@ class MatchPredictor:
                     try:
                         parts = score.split(':')
                         inverted_score = f"{parts[1]}:{parts[0]}"
-                        all_half_scores.append((inverted_score, pct * 1.5))
+                        all_half_scores.append((inverted_score, pct * power_weight * 1.2))
                     except (ValueError, IndexError):
                         pass
         
-        # 6. Ajouter les tendances par numéro de match
+        # 4. Ajouter les tendances par numéro de match
         all_match_ids = [match.get('match_id', '') for match in self.matches if match.get('match_id', '')]
         match_id_counter = Counter(all_match_ids)
         most_common_ids = match_id_counter.most_common(3)
@@ -437,50 +351,78 @@ class MatchPredictor:
                 
                 if common_final:
                     for score, count, pct in common_final[:2]:
-                        all_final_scores.append((score, pct * 0.8))
+                        all_final_scores.append((score, pct * 0.8))  # Poids légèrement plus faible
                 
                 if common_half:
                     for score, count, pct in common_half[:2]:
                         all_half_scores.append((score, pct * 0.8))
         
-        # 7. Générer des scores en fonction des probabilités de victoire/match nul
-        # Créer quelques scores typiques pour chaque résultat
-        # Ces scores seront pondérés par les probabilités de résultat
-        team1_win_scores = [("1:0", 30), ("2:0", 25), ("2:1", 20), ("3:1", 15), ("3:0", 10)]
-        draw_scores = [("0:0", 35), ("1:1", 45), ("2:2", 20)]
-        team2_win_scores = [("0:1", 30), ("0:2", 25), ("1:2", 20), ("1:3", 15), ("0:3", 10)]
+        # 5. Analyse statistique avancée pour générer des scores probables
+        # Calculer les moyennes de buts
+        team1_home_goals = sum(self.team_stats[team1].get('home_goals_for', [])) / max(1, home_matches)
+        team1_home_conceded = sum(self.team_stats[team1].get('home_goals_against', [])) / max(1, home_matches)
         
-        # Ajouter ces scores avec un poids proportionnel aux probabilités
-        for score, base_weight in team1_win_scores:
-            weight = base_weight * win_prob_team1 * 100
-            all_final_scores.append((score, weight))
+        team2_away_goals = sum(self.team_stats[team2].get('away_goals_for', [])) / max(1, away_matches)
+        team2_away_conceded = sum(self.team_stats[team2].get('away_goals_against', [])) / max(1, away_matches)
         
-        for score, base_weight in draw_scores:
-            weight = base_weight * draw_prob * 100
-            all_final_scores.append((score, weight))
+        # Prédire les buts attendus
+        expected_goals_team1 = (team1_home_goals + team2_away_conceded) / 2
+        expected_goals_team2 = (team2_away_goals + team1_home_conceded) / 2
         
-        for score, base_weight in team2_win_scores:
-            weight = base_weight * win_prob_team2 * 100
-            all_final_scores.append((score, weight))
+        # Ajuster en fonction des forces relatives
+        expected_goals_team1 *= (adjusted_team1_power / adjusted_team2_power) ** 0.5
+        expected_goals_team2 *= (adjusted_team2_power / adjusted_team1_power) ** 0.5
         
-        # Faire de même pour la mi-temps avec des scores adaptés
-        team1_win_half = [("1:0", 50), ("2:0", 30), ("2:1", 20)]
-        draw_half = [("0:0", 60), ("1:1", 40)]
-        team2_win_half = [("0:1", 50), ("0:2", 30), ("1:2", 20)]
+        # Générer des scores probables autour des valeurs attendues
+        import itertools
         
-        for score, base_weight in team1_win_half:
-            weight = base_weight * win_prob_team1 * 100 * 0.8  # Moins de corrélation pour la mi-temps
-            all_half_scores.append((score, weight))
+        for team1_goals in range(max(0, int(expected_goals_team1 - 1)), int(expected_goals_team1 + 2)):
+            for team2_goals in range(max(0, int(expected_goals_team2 - 1)), int(expected_goals_team2 + 2)):
+                score = f"{team1_goals}:{team2_goals}"
+                
+                # Calculer la probabilité de ce score en fonction de la différence avec les valeurs attendues
+                diff1 = abs(team1_goals - expected_goals_team1)
+                diff2 = abs(team2_goals - expected_goals_team2)
+                avg_diff = (diff1 + diff2) / 2
+                
+                # Plus la différence est faible, plus le poids est élevé
+                weight = max(0, 70 - avg_diff * 30)
+                
+                # Ajuster en fonction des probabilités de victoire/nul
+                if team1_goals > team2_goals:
+                    weight *= win_prob_team1 * 1.5
+                elif team2_goals > team1_goals:
+                    weight *= win_prob_team2 * 1.5
+                else:
+                    weight *= draw_prob * 3  # Donner plus de poids au match nul si prédit
+                
+                all_final_scores.append((score, weight))
         
-        for score, base_weight in draw_half:
-            weight = base_weight * (draw_prob + 0.1) * 100  # Plus de nuls à la mi-temps
-            all_half_scores.append((score, weight))
+        # Faire de même pour la mi-temps (avec des valeurs ajustées)
+        half_expected_goals_team1 = expected_goals_team1 * 0.45  # En moyenne, 45% des buts sont marqués en 1ère mi-temps
+        half_expected_goals_team2 = expected_goals_team2 * 0.45
         
-        for score, base_weight in team2_win_half:
-            weight = base_weight * win_prob_team2 * 100 * 0.8
-            all_half_scores.append((score, weight))
+        for team1_goals in range(max(0, int(half_expected_goals_team1 - 0.5)), int(half_expected_goals_team1 + 1.5)):
+            for team2_goals in range(max(0, int(half_expected_goals_team2 - 0.5)), int(half_expected_goals_team2 + 1.5)):
+                score = f"{team1_goals}:{team2_goals}"
+                
+                diff1 = abs(team1_goals - half_expected_goals_team1)
+                diff2 = abs(team2_goals - half_expected_goals_team2)
+                avg_diff = (diff1 + diff2) / 2
+                
+                weight = max(0, 70 - avg_diff * 30)
+                
+                # Ajustement des probabilités comme pour le temps complet
+                if team1_goals > team2_goals:
+                    weight *= win_prob_team1 * 1.5
+                elif team2_goals > team1_goals:
+                    weight *= win_prob_team2 * 1.5
+                else:
+                    weight *= draw_prob * 2.5
+                
+                all_half_scores.append((score, weight))
         
-        # 8. Combiner et fusionner les scores identiques
+        # 6. Combiner et fusionner les scores identiques
         final_score_weights = defaultdict(float)
         for score, weight in all_final_scores:
             final_score_weights[score] += weight
@@ -493,7 +435,7 @@ class MatchPredictor:
         sorted_final_scores = sorted(final_score_weights.items(), key=lambda x: x[1], reverse=True)
         sorted_half_scores = sorted(half_score_weights.items(), key=lambda x: x[1], reverse=True)
         
-        # 9. Remplir les résultats de prédiction
+        # 7. Remplir les résultats de prédiction
         
         # Prédictions des scores mi-temps
         if sorted_half_scores:
@@ -522,14 +464,11 @@ class MatchPredictor:
                     # Déterminer le gagnant de la 1ère mi-temps pour le premier score
                     if i == 0:
                         if team1_goals > team2_goals:
-                            ht_winner_prob = max(50, min(95, round(win_prob_team1 * 100)))
-                            prediction_results["winner_half_time"] = {"team": team1, "probability": ht_winner_prob}
+                            prediction_results["winner_half_time"] = {"team": team1, "probability": confidence}
                         elif team2_goals > team1_goals:
-                            ht_winner_prob = max(50, min(95, round(win_prob_team2 * 100)))
-                            prediction_results["winner_half_time"] = {"team": team2, "probability": ht_winner_prob}
+                            prediction_results["winner_half_time"] = {"team": team2, "probability": confidence}
                         else:
-                            ht_draw_prob = max(50, min(95, round(draw_prob * 100)))
-                            prediction_results["winner_half_time"] = {"team": "Nul", "probability": ht_draw_prob}
+                            prediction_results["winner_half_time"] = {"team": "Nul", "probability": confidence}
                 except (ValueError, IndexError):
                     continue
         
@@ -560,18 +499,19 @@ class MatchPredictor:
                     # Déterminer le gagnant du match pour le premier score
                     if i == 0:
                         if team1_goals > team2_goals:
-                            ft_winner_prob = max(50, min(95, round(win_prob_team1 * 100)))
-                            prediction_results["winner_full_time"] = {"team": team1, "probability": ft_winner_prob}
+                            # Utiliser la probabilité de victoire calculée précédemment
+                            win_confidence = round(win_prob_team1 * 100)
+                            prediction_results["winner_full_time"] = {"team": team1, "probability": win_confidence}
                         elif team2_goals > team1_goals:
-                            ft_winner_prob = max(50, min(95, round(win_prob_team2 * 100)))
-                            prediction_results["winner_full_time"] = {"team": team2, "probability": ft_winner_prob}
+                            win_confidence = round(win_prob_team2 * 100)
+                            prediction_results["winner_full_time"] = {"team": team2, "probability": win_confidence}
                         else:
-                            ft_draw_prob = max(50, min(95, round(draw_prob * 100)))
-                            prediction_results["winner_full_time"] = {"team": "Nul", "probability": ft_draw_prob}
+                            draw_confidence = round(draw_prob * 100)
+                            prediction_results["winner_full_time"] = {"team": "Nul", "probability": draw_confidence}
                 except (ValueError, IndexError):
                     continue
         
-        # 10. Calcul du niveau de confiance global
+        # 8. Calcul du niveau de confiance global
         confidence_factors = []
         
         # Facteur 1: Nombre de confrontations directes
@@ -601,22 +541,15 @@ class MatchPredictor:
             confidence_factors.append(50)
         
         # Facteur 3: Présence de cotes (indique une analyse supplémentaire)
-        # Facteur 3: Présence de cotes (indique une analyse supplémentaire)
         if odds1 and odds2:
-            # Analyser si les cotes sont cohérentes avec notre analyse des confrontations directes
-            if direct_matches_count > 0:
-                # Favori selon les cotes
-                bookmaker_favorite = team1 if market_prob_team1 > market_prob_team2 else team2
-                
-                # Favori selon les confrontations directes
-                direct_favorite = team1 if direct_win_prob_team1 > direct_win_prob_team2 else team2
-                
-                if bookmaker_favorite == direct_favorite:
-                    confidence_factors.append(85)  # Les cotes confirment l'historique
-                else:
-                    confidence_factors.append(65)  # Désaccord entre cotes et historique
+            # Analyser si les cotes sont cohérentes avec notre analyse statistique
+            market_favorite = team1 if implied_prob1 > implied_prob2 else team2
+            statistical_favorite = team1 if team1_power > team2_power else team2
+            
+            if market_favorite == statistical_favorite:
+                confidence_factors.append(85)  # Cotes et statistiques en accord
             else:
-                confidence_factors.append(75)  # Cotes disponibles mais pas d'historique direct
+                confidence_factors.append(65)  # Cotes et statistiques en désaccord
         else:
             confidence_factors.append(60)  # Pas de cotes disponibles
         
@@ -640,6 +573,16 @@ class MatchPredictor:
                 except (ValueError, IndexError):
                     confidence_factors.append(65)
         
+        # Facteur 5: Niveau de force des équipes
+        avg_team_power = (team1_power + team2_power) / 2
+        if avg_team_power > 75:
+            confidence_factors.append(85)  # Équipes fortes = plus prévisibles
+        elif avg_team_power > 50:
+            confidence_factors.append(75)
+        else:
+            confidence_factors.append(65)  # Équipes plus faibles = moins prévisibles
+        
+        # Calcul de la confiance globale (moyenne pondérée)
         # Calcul de la confiance globale (moyenne pondérée)
         if confidence_factors:
             prediction_results["confidence_level"] = round(sum(confidence_factors) / len(confidence_factors))
@@ -648,43 +591,23 @@ class MatchPredictor:
         prediction_results["avg_goals_half_time"] = round(prediction_results["avg_goals_half_time"], 1)
         prediction_results["avg_goals_full_time"] = round(prediction_results["avg_goals_full_time"], 1)
         
-        # Ajouter des informations supplémentaires pour le débogage et l'analyse
-        top_score = sorted_final_scores[0][0] if sorted_final_scores else "0:0"
-        top_half = sorted_half_scores[0][0] if sorted_half_scores else "0:0"
-        
-        # Nombre total de buts selon le score le plus probable
-        try:
-            parts = top_score.split(':')
-            total_goals = int(parts[0]) + int(parts[1])
-        except:
-            total_goals = prediction_results["avg_goals_full_time"]
-        
-        try:
-            half_parts = top_half.split(':')
-            half_goals = int(half_parts[0]) + int(half_parts[1])
-        except:
-            half_goals = prediction_results["avg_goals_half_time"]
-        
-        prediction_results["recommended_goals"] = {
-            "half_time": half_goals,
-            "full_time": total_goals
-        }
-        
+        # Ajouter des informations supplémentaires pour le débogage
         prediction_results["stats"] = {
-            "team1_power": round(final_team1_power),
-            "team2_power": round(final_team2_power),
+            "team1_power": round(team1_power),
+            "team2_power": round(team2_power),
             "team1_form": team1_form,
             "team2_form": team2_form,
             "win_prob_team1": round(win_prob_team1 * 100),
             "win_prob_team2": round(win_prob_team2 * 100),
             "draw_prob": round(draw_prob * 100),
-            "direct_match_stats": direct_results
+            "expected_goals_team1": round(expected_goals_team1, 2),
+            "expected_goals_team2": round(expected_goals_team2, 2)
         }
         
         return prediction_results
 
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
-    """Formate le résultat de prédiction en message lisible avec design embelli"""
+    """Formate le résultat de prédiction en message lisible avec plus d'informations"""
     if "error" in prediction:
         return f"❌ Erreur: {prediction['error']}"
     
@@ -693,110 +616,116 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     team2 = teams["team2"]
     
     message = [
-        f"🏆 *PREDICTION FIFA 4x4* 🏆",
-        f"━━━━━━━━━━━━━━━━━━━━━",
-        f"⚽ *{team1}* 🆚 *{team2}*",
-        f"📊 Fiabilité: {prediction['confidence_level']}% | 🤝 Matchs: {prediction['direct_matches']}",
-        f"━━━━━━━━━━━━━━━━━━━━━",
+        f"🔮 *PRÉDICTION: {team1} vs {team2}*",
+        f"📊 Niveau de confiance: {prediction['confidence_level']}%",
+        f"🤝 Confrontations directes: {prediction['direct_matches']}",
         "\n"
     ]
     
-    # Section 0: Probabilités de résultat
+    # Section 0: Probabilités de résultat (si disponibles)
     stats = prediction.get("stats", {})
     if stats:
-        message.append("📋 *PRONOSTIC RÉSULTAT:*")
-        message.append(f"  🔹 Victoire {team1}: {stats.get('win_prob_team1', 0)}%")
-        message.append(f"  🔸 Match nul: {stats.get('draw_prob', 0)}%")
-        message.append(f"  🔹 Victoire {team2}: {stats.get('win_prob_team2', 0)}%")
+        message.append("*📊 PROBABILITÉS:*")
+        message.append(f"  • Victoire {team1}: {stats.get('win_prob_team1', 0)}%")
+        message.append(f"  • Match nul: {stats.get('draw_prob', 0)}%")
+        message.append(f"  • Victoire {team2}: {stats.get('win_prob_team2', 0)}%")
         message.append("")
     
-    # Section 1: Scores mi-temps
-    message.append("⏱️ *SCORES MI-TEMPS:*")
+    # Section 1: Scores exacts à la première mi-temps
+    message.append("*⏱️ SCORES PRÉVUS (1ÈRE MI-TEMPS):*")
     if prediction["half_time_scores"]:
-        for i, score_data in enumerate(prediction["half_time_scores"][:2], 1):
-            stars = "⭐⭐⭐" if i == 1 else "⭐⭐"
-            message.append(f"  {stars} *{score_data['score']}* ({score_data['confidence']}%)")
+        for i, score_data in enumerate(prediction["half_time_scores"], 1):
+            message.append(f"  {i}. {score_data['score']} ({score_data['confidence']}%)")
     else:
-        message.append("  ℹ️ Données insuffisantes")
+        message.append("  Pas assez de données pour prédire le score à la mi-temps")
     
     # Gagnant à la mi-temps
     winner_ht = prediction["winner_half_time"]
     if winner_ht["team"]:
         if winner_ht["team"] == "Nul":
-            message.append(f"  👉 Pronostic: *Match nul* ({winner_ht['probability']}%)")
+            message.append(f"  👉 Mi-temps: Match nul probable ({winner_ht['probability']}%)")
         else:
-            message.append(f"  👉 Pronostic: *{winner_ht['team']}* ({winner_ht['probability']}%)")
+            message.append(f"  👉 Mi-temps: {winner_ht['team']} gagnant probable ({winner_ht['probability']}%)")
     
-    # Recommandation buts mi-temps
-    half_goals = prediction.get("recommended_goals", {}).get("half_time", prediction["avg_goals_half_time"])
-    
-    if half_goals == 0:
-        message.append(f"  🎯 *Moins de 0.5* buts (75%)")
-    elif half_goals == 1:
-        message.append(f"  🎯 *Moins de 1.5* buts (70%)")
-    else:
-        message.append(f"  🎯 *Plus de {half_goals - 0.5}* buts (70%)")
+    # Ajouter une recommandation pour le nombre de buts à la mi-temps
+    avg_goals_ht = prediction["avg_goals_half_time"]
+    if avg_goals_ht > 0:
+        # Déterminer la ligne de buts la plus proche
+        if avg_goals_ht < 0.85:
+            line = 0.5
+            rec = "Plus" if avg_goals_ht > 0.5 else "Moins"
+        elif avg_goals_ht < 1.85:
+            line = 1.5
+            rec = "Plus" if avg_goals_ht > 1.5 else "Moins"
+        else:
+            line = 2.5
+            rec = "Plus" if avg_goals_ht > 2.5 else "Moins"
+        
+        conf = min(95, max(60, 75 + round(10 * abs(avg_goals_ht - line))))
+        message.append(f"  💬 Recommandation: *{rec} de {line}* buts en 1ère mi-temps ({conf}%)")
     
     message.append("")
     
-    # Section 2: Scores temps réglementaire
-    message.append("⚽ *SCORES TEMPS RÉGLEMENTAIRE:*")
+    # Section 2: Scores exacts au temps réglementaire
+    message.append("*⚽ SCORES PRÉVUS (TEMPS RÉGLEMENTAIRE):*")
     if prediction["full_time_scores"]:
-        for i, score_data in enumerate(prediction["full_time_scores"][:3], 1):
-            stars = "⭐⭐⭐" if i == 1 else ("⭐⭐" if i == 2 else "⭐")
-            message.append(f"  {stars} *{score_data['score']}* ({score_data['confidence']}%)")
+        for i, score_data in enumerate(prediction["full_time_scores"], 1):
+            message.append(f"  {i}. {score_data['score']} ({score_data['confidence']}%)")
     else:
-        message.append("  ℹ️ Données insuffisantes")
+        message.append("  Pas assez de données pour prédire le score final")
     
     # Gagnant du match
     winner_ft = prediction["winner_full_time"]
     if winner_ft["team"]:
         if winner_ft["team"] == "Nul":
-            message.append(f"  👉 Pronostic: *Match nul* ({winner_ft['probability']}%)")
+            message.append(f"  👉 Résultat final: Match nul probable ({winner_ft['probability']}%)")
         else:
-            message.append(f"  👉 Pronostic: *{winner_ft['team']}* ({winner_ft['probability']}%)")
+            message.append(f"  👉 Résultat final: {winner_ft['team']} gagnant probable ({winner_ft['probability']}%)")
     
-    # Recommandation buts temps complet
-    full_goals = prediction.get("recommended_goals", {}).get("full_time", prediction["avg_goals_full_time"])
-    
-    if full_goals <= 1:
-        message.append(f"  🎯 *Moins de 1.5* buts (70%)")
-    elif full_goals == 2:
-        message.append(f"  🎯 *Plus de 1.5* buts (75%)")
-    elif full_goals == 3:
-        message.append(f"  🎯 *Plus de 2.5* buts (70%)")
-    elif full_goals == 4:
-        message.append(f"  🎯 *Plus de 3.5* buts (65%)")
-    else:
-        message.append(f"  🎯 *Plus de 4.5* buts (65%)")
+    # Ajouter une recommandation pour le nombre de buts au temps réglementaire
+    avg_goals_ft = prediction["avg_goals_full_time"]
+    if avg_goals_ft > 0:
+        # Déterminer la ligne de buts la plus proche
+        if avg_goals_ft < 1.85:
+            line = 1.5
+            rec = "Plus" if avg_goals_ft > 1.5 else "Moins"
+        elif avg_goals_ft < 2.85:
+            line = 2.5
+            rec = "Plus" if avg_goals_ft > 2.5 else "Moins"
+        elif avg_goals_ft < 3.85:
+            line = 3.5
+            rec = "Plus" if avg_goals_ft > 3.5 else "Moins"
+        else:
+            line = 4.5
+            rec = "Plus" if avg_goals_ft > 4.5 else "Moins"
+        
+        conf = min(95, max(60, 75 + round(10 * abs(avg_goals_ft - line))))
+        message.append(f"  💬 Recommandation: *{rec} de {line}* buts au total ({conf}%)")
     
     message.append("")
     
-    # Section 3: Statistiques et forme des équipes
-    message.append("📈 *ANALYSE DES ÉQUIPES:*")
-    
-    direct_stats = stats.get("direct_match_stats", {})
-    if direct_stats and prediction['direct_matches'] > 0:
-        message.append(f"  🔍 Confrontations directes:")
-        message.append(f"      • {team1}: {direct_stats.get('team1_wins', 0)} victoires")
-        message.append(f"      • Nuls: {direct_stats.get('draws', 0)}")
-        message.append(f"      • {team2}: {direct_stats.get('team2_wins', 0)} victoires")
-    
-    message.append(f"  💪 Forme récente: ")
-    message.append(f"      • {team1}: {stats.get('team1_form', 0)}/100")
-    message.append(f"      • {team2}: {stats.get('team2_form', 0)}/100")
+    # Section 3: Statistiques des équipes (si disponibles)
+    if stats:
+        message.append("*📈 ANALYSE DES ÉQUIPES:*")
+        message.append(f"  • Force: {team1} ({stats.get('team1_power', 0)}) vs {team2} ({stats.get('team2_power', 0)})")
+        message.append(f"  • Forme récente: {team1} ({stats.get('team1_form', 0)}) vs {team2} ({stats.get('team2_form', 0)})")
+        
+        # Ajouter moyenne des buts
+        message.append(f"  • Buts attendus: {stats.get('expected_goals_team1', 0)} - {stats.get('expected_goals_team2', 0)}")
+        message.append(f"  • Total buts prévus: {prediction['avg_goals_full_time']}")
+        message.append("")
+    else:
+        # Section statistiques moyennes (version antérieure)
+        message.append("*📈 STATISTIQUES MOYENNES:*")
+        message.append(f"  • Buts 1ère mi-temps: {prediction['avg_goals_half_time']}")
+        message.append(f"  • Buts temps réglementaire: {prediction['avg_goals_full_time']}")
+        message.append("")
     
     # Section 4: Information sur les cotes si disponibles
     odds = prediction["odds"]
     if odds["team1"] and odds["team2"]:
-        message.append("")
-        message.append("💰 *COTES:*")
+        message.append("*💰 COTES:*")
         message.append(f"  • {team1}: {odds['team1']}")
         message.append(f"  • {team2}: {odds['team2']}")
-    
-    # Ajouter le footer avec canal
-    message.append("")
-    message.append("━━━━━━━━━━━━━━━━━━━━━")
-    message.append("📱 Rejoignez @alvecapital1 pour plus de prédictions!")
     
     return "\n".join(message)

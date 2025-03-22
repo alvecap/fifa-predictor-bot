@@ -14,7 +14,13 @@ logger = logging.getLogger(__name__)
 # Initialisation de l'application Flask
 app = Flask(__name__)
 # Permettre les requêtes CORS (important pour les applications web)
-CORS(app)
+# Améliorer la configuration CORS
+allowed_origins = [
+    "https://fifa-predictor-ui.onrender.com",
+    "https://t.me",
+    "http://localhost:5000"
+]
+CORS(app, resources={r"/*": {"origins": allowed_origins}}, supports_credentials=True)
 
 # Initialiser le prédicteur une seule fois au démarrage de l'application
 predictor = MatchPredictor()

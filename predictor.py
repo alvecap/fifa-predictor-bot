@@ -328,165 +328,70 @@ class MatchPredictor:
         return prediction_results
 
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
-    """Formate le résultat de prédiction en message lisible et concis"""
-    if "error" in prediction:
-        return f"❌ *Erreur*: {prediction['error']}"
-    
-    teams = prediction["teams"]
-    team1 = teams["team1"]
-    team2 = teams["team2"]
-    
-    # Informations de base
-    header = [
-        f"🔮 *FIFA 4x4 PRÉDICTION*",
-        f"",
-        f"⚽ *{team1}* vs *{team2}*",
-        f"📊 Fiabilité: *{prediction['confidence_level']}%* | 🤝 Confrontations: *{prediction['direct_matches']}*",
-        f""
-    ]
-    
-    # Section 1: Résultat final
-    winner_ft = prediction["winner_full_time"]
-    result_section = ["*📝 RÉSULTAT FINAL*"]
-    
-    if winner_ft["team"]:
-        if winner_ft["team"] == "Nul":
-            result_section.append(f"🔹 *Prédiction*: Match nul (*{winner_ft['probability']}%*)")
-        else:
-            result_section.append(f"🔹 *Prédiction*: Victoire *{winner_ft['team']}* (*{winner_ft['probability']}%*)")
-    
-    # Ajouter les scores probables (max 2)
-    if prediction["full_time_scores"]:
-        scores = []
-        for i, score_data in enumerate(prediction["full_time_scores"][:2]):
-            scores.append(f"*{score_data['score']}* (*{score_data['confidence']}%*)")
-        result_section.append(f"🔹 *Scores probables*: {' ou '.join(scores)}")
-    
-    # Ajouter les buts (Over/Under)
-    avg_goals_ft = prediction["avg_goals_full_time"]
-    
-    # Déterminer le seuil approprié pour Over/Under
-    if avg_goals_ft < 1.5:
-        threshold = 1.5
-        is_over = avg_goals_ft > threshold
-        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
-    elif avg_goals_ft < 2.5:
-        threshold = 2.5
-        is_over = avg_goals_ft > threshold
-        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
-    elif avg_goals_ft < 3.5:
-        threshold = 3.5
-        is_over = avg_goals_ft > threshold
-        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
-    else:
-        threshold = 4.5
-        is_over = avg_goals_ft > threshold
-        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
-    
-    if is_over:
-        result_section.append(f"🔹 *Buts*: Plus de {threshold} (*{round(probability)}%*)")
-    else:
-        result_section.append(f"🔹 *Buts*: Moins de {threshold} (*{round(100-probability)}%*)")
-    
-    # Section 2: Mi-temps
-    halftime_section = ["", "*⏱️ PRÉDICTION MI-TEMPS*"]
-    
-    # Vainqueur à la mi-temps
-    winner_ht = prediction["winner_half_time"]
-    if winner_ht["team"]:
-        if winner_ht["team"] == "Nul":
-            halftime_section.append(f"🔹 *Prédiction*: Match nul à la mi-temps (*{winner_ht['probability']}%*)")
-        else:
-            halftime_section.append(f"🔹 *Prédiction*: Avantage *{winner_ht['team']}* à la mi-temps (*{winner_ht['probability']}%*)")
-    
-    # Ajouter le score le plus probable de mi-temps
-    if prediction["half_time_scores"]:
-        score_data = prediction["half_time_scores"][0]
-        halftime_section.append(f"🔹 *Score probable*: *{score_data['score']}* (*{score_data['confidence']}%*)")
-    
-    # Ajouter les buts de mi-temps (Over/Under)
-    avg_goals_ht = prediction["avg_goals_half_time"]
-    
-    # Déterminer le seuil pour la mi-temps
-    if avg_goals_ht < 1.5:
-        threshold_ht = 1.5
-    else:
-        threshold_ht = 2.5
-    
-    is_over_ht = avg_goals_ht > threshold_ht
-    probability_ht = 40 + min(50, max(-40, (avg_goals_ht - threshold_ht) * 30))
-    
-    if is_over_ht:
-        halftime_section.append(f"🔹 *Buts mi-temps*: Plus de {threshold_ht} (*{round(probability_ht)}%*)")
-    else:
-        halftime_section.append(f"🔹 *Buts mi-temps*: Moins de {threshold_ht} (*{round(100-probability_ht)}%*)")
-    
-    # Section cotes (si disponibles)
-    odds_section = []
-    odds = prediction["odds"]
-    if odds["team1"] and odds["team2"]:
-        odds_section = [
-            "",
-            "*💰 COTES*",
-            f"🔹 *{team1}*: {odds['team1']}",
-            f"🔹 *{team2}*: {odds['team2']}"
+    """Formate le résultat de prédiction en message lisible"""
+    try:
+        if "error" in prediction:
+            return f"❌ *Erreur*: {prediction['error']}"
+        
+        teams = prediction["teams"]
+        team1 = teams["team1"]
+        team2 = teams["team2"]
+        
+        message = [
+            f"🔮 *PRÉDICTION: {team1} vs {team2}*",
+            f"📊 Niveau de confiance: *{prediction['confidence_level']}%*",
+            f"🤝 Confrontations directes: *{prediction['direct_matches']}*",
+            "\n"
         ]
-    
-    # Section des conseils
-    tips_section = [
-        "",
-        "*💡 CONSEILS DE PARIS*"
-    ]
-    
-    # Conseil 1: Résultat match
-    if winner_ft["team"] and winner_ft["probability"] > 65:
-        if winner_ft["team"] == "Nul":
-            tips_section.append(f"🔸 *Match nul* (*{winner_ft['probability']}%*)")
+        
+        # Section 1: Scores exacts à la première mi-temps
+        message.append("*⏱️ SCORES PRÉVUS (1ÈRE MI-TEMPS):*")
+        if prediction["half_time_scores"]:
+            for i, score_data in enumerate(prediction["half_time_scores"], 1):
+                message.append(f"  {i}. *{score_data['score']}* (*{score_data['confidence']}%*)")
         else:
-            tips_section.append(f"🔸 *Victoire {winner_ft['team']}* (*{winner_ft['probability']}%*)")
-    elif winner_ft["team"] and winner_ft["probability"] > 55:
-        if winner_ft["team"] == "Nul":
-            tips_section.append(f"🔸 *Double chance*: {team1} ou Match nul")
+            message.append("  Pas assez de données pour prédire le score à la mi-temps")
+        
+        # Gagnant à la mi-temps
+        winner_ht = prediction["winner_half_time"]
+        if winner_ht["team"]:
+            if winner_ht["team"] == "Nul":
+                message.append(f"  👉 Mi-temps: Match nul probable (*{winner_ht['probability']}%*)")
+            else:
+                message.append(f"  👉 Mi-temps: *{winner_ht['team']}* gagnant probable (*{winner_ht['probability']}%*)")
+        message.append("")
+        
+        # Section 2: Scores exacts au temps réglementaire
+        message.append("*⚽ SCORES PRÉVUS (TEMPS RÉGLEMENTAIRE):*")
+        if prediction["full_time_scores"]:
+            for i, score_data in enumerate(prediction["full_time_scores"], 1):
+                message.append(f"  {i}. *{score_data['score']}* (*{score_data['confidence']}%*)")
         else:
-            other_team = team2 if winner_ft["team"] == team1 else team1
-            tips_section.append(f"🔸 *Double chance*: {winner_ft['team']} ou Match nul")
-    
-    # Conseil 2: Nombre de buts
-    if is_over and probability > 65:
-        tips_section.append(f"🔸 *Plus de {threshold} buts* (*{round(probability)}%*)")
-    elif not is_over and (100-probability) > 65:
-        tips_section.append(f"🔸 *Moins de {threshold} buts* (*{round(100-probability)}%*)")
-    
-    # Conseil 3: Les deux équipes marquent?
-    both_teams_score = False
-    for score_data in prediction["full_time_scores"][:3]:
-        parts = score_data["score"].split(":")
-        if int(parts[0]) > 0 and int(parts[1]) > 0:
-            both_teams_score = True
-            break
-    
-    if both_teams_score:
-        tips_section.append("🔸 *Les deux équipes marquent*: Oui")
-    else:
-        tips_section.append("🔸 *Les deux équipes marquent*: Non")
-    
-    # Avertissement
-    disclaimer = [
-        "",
-        "*⚠️ Avertissement*: Ces prédictions sont basées sur des données historiques et ne garantissent pas le résultat. Pariez de manière responsable."
-    ]
-    
-    # Assembler le message complet
-    all_sections = [
-        "\n".join(header),
-        "\n".join(result_section),
-        "\n".join(halftime_section)
-    ]
-    
-    if odds_section:
-        all_sections.append("\n".join(odds_section))
-    
-    all_sections.append("\n".join(tips_section))
-    all_sections.append("\n".join(disclaimer))
-    
-    return "\n".join(all_sections)
+            message.append("  Pas assez de données pour prédire le score final")
+        
+        # Gagnant du match
+        winner_ft = prediction["winner_full_time"]
+        if winner_ft["team"]:
+            if winner_ft["team"] == "Nul":
+                message.append(f"  👉 Résultat final: Match nul probable (*{winner_ft['probability']}%*)")
+            else:
+                message.append(f"  👉 Résultat final: *{winner_ft['team']}* gagnant probable (*{winner_ft['probability']}%*)")
+        message.append("")
+        
+        # Section 3: Statistiques moyennes
+        message.append("*📈 STATISTIQUES MOYENNES:*")
+        message.append(f"  • Buts 1ère mi-temps: *{prediction['avg_goals_half_time']}*")
+        message.append(f"  • Buts temps réglementaire: *{prediction['avg_goals_full_time']}*")
+        
+        # Section 4: Information sur les cotes si disponibles
+        odds = prediction["odds"]
+        if odds["team1"] and odds["team2"]:
+            message.append("")
+            message.append("*💰 COTES:*")
+            message.append(f"  • *{team1}*: {odds['team1']}")
+            message.append(f"  • *{team2}*: {odds['team2']}")
+        
+        return "\n".join(message)
+    except Exception as e:
+        logger.error(f"Erreur lors du formatage de la prédiction: {e}")
+        return "❌ *Erreur lors du formatage de la prédiction*. Veuillez réessayer."

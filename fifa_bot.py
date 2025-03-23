@@ -70,8 +70,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     await update.message.reply_text(
         f"👋 *Bienvenue {user.first_name} sur FIFA 4x4 Predictor!*\n\n"
-        "Notre bot d'analyse vous aide à prédire les résultats des matchs FIFA 4x4 en utilisant l'intelligence artificielle.\n\n"
-        "⚠️ *IMPORTANT:* Pour accéder à toutes les fonctionnalités, vous devez être abonné à notre canal principal.\n\n"
+        "Notre bot d'analyse vous aide à prédire les résultats des matchs "
+        "FIFA 4x4 en utilisant l'intelligence artificielle.\n\n"
+        "⚠️ *IMPORTANT*: Pour accéder à toutes les fonctionnalités, vous devez être abonné à notre canal principal.\n\n"
         "1️⃣ Rejoignez @alvecapital1\n"
         "2️⃣ Cliquez sur \"Vérifier mon abonnement\"\n"
         "3️⃣ Commencez à recevoir des prédictions gagnantes!",
@@ -299,11 +300,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "*📱 Via l'interface de boutons:*\n"
             "1. Cliquez sur 'Nouvelle Prédiction'\n"
             "2. Sélectionnez les équipes qui s'affrontent\n"
-            "3. Entrez les cotes (optionnel)\n"
+            "3. Entrez les cotes (obligatoire)\n"
             "4. Recevez votre prédiction détaillée\n\n"
             "*⌨️ Via les commandes textuelles:*\n"
-            "• `/predict Équipe1 vs Équipe2` - Obtenir une prédiction simple\n"
-            "• `/odds Équipe1 vs Équipe2 cote1 cote2` - Prédiction avec cotes\n\n"
+            "• `/predict Équipe1 vs Équipe2` - Obtenir une prédiction simple (les cotes vous seront demandées)\n"
+            "• `/odds Équipe1 vs Équipe2 cote1 cote2` - Prédiction directe avec cotes\n\n"
             "Exemple: `/predict Manchester United vs Chelsea`\n"
             "Exemple: `/odds Arsenal vs Liverpool 1.8 3.5`",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Retour", callback_data="back_to_menu")]]),
@@ -357,30 +358,13 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         context.user_data["team2"] = team_name
         
-        # Passer à l'étape des cotes
+        # Passer à l'étape des cotes (obligatoire)
         await show_odds_entry(update, context)
     
     # Gestion du retour à la sélection de l'équipe 2
     elif query.data == "back_to_team2":
         context.user_data["selecting"] = "team2"
         await show_team_selector(update, context, "team2")
-    
-    # Gestion du saut de l'étape des cotes
-    elif query.data == "skip_odds":
-        team1 = context.user_data.get("team1", "")
-        team2 = context.user_data.get("team2", "")
-        
-        if not team1 or not team2:
-            await query.edit_message_text(
-                "⚠️ *Erreur*\n\n"
-                "Une erreur s'est produite. Veuillez recommencer la prédiction.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Retour au menu", callback_data="back_to_menu")]]),
-                parse_mode='Markdown'
-            )
-            return
-        
-        # Générer la prédiction sans cotes
-        await generate_prediction(update, context, team1, team2)
     
     # Gestion de l'entrée des cotes
     elif query.data == "enter_odds":
@@ -426,11 +410,26 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 )
                 return
             
-            # Afficher un message de chargement
-            await query.edit_message_text("⏳ *Analyse en cours*, veuillez patienter...", parse_mode='Markdown')
+            # Stocker les équipes et demander les cotes (obligatoire)
+            context.user_data["team1"] = team1
+            context.user_data["team2"] = team2
             
-            # Générer la prédiction
-            await generate_prediction(update, context, team1, team2)
+            # Passer à l'étape des cotes
+            context.user_data["entering_odds"] = True
+            
+            await query.edit_message_text(
+                f"⚽ *Match sélectionné: {team1} vs {team2}*\n\n"
+                "💰 *Entrez les cotes*\n\n"
+                "Veuillez envoyer les cotes au format suivant:\n"
+                "`cote1 cote2`\n\n"
+                "Exemple: `1.85 3.4`\n\n"
+                "Ces cotes correspondent respectivement à:\n"
+                f"• *{team1}*: cote1\n"
+                f"• *{team2}*: cote2",
+                parse_mode='Markdown'
+            )
+            
+            return ENTERING_ODDS
     
     # Annuler une opération
     elif query.data == "cancel":
@@ -504,21 +503,20 @@ async def show_team_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Fonction pour afficher l'entrée des cotes
 async def show_odds_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Affiche l'écran pour entrer ou ignorer les cotes."""
+    """Affiche l'écran pour entrer les cotes (obligatoire)."""
     query = update.callback_query
     team1 = context.user_data.get("team1", "")
     team2 = context.user_data.get("team2", "")
     
     keyboard = [
         [InlineKeyboardButton("💰 Entrer les cotes", callback_data="enter_odds")],
-        [InlineKeyboardButton("⏩ Ignorer cette étape", callback_data="skip_odds")],
         [InlineKeyboardButton("🔙 Revenir à la sélection", callback_data="back_to_team2")]
     ]
     
     await query.edit_message_text(
         f"⚽ *Match sélectionné: {team1} vs {team2}*\n\n"
-        "Souhaitez-vous ajouter les cotes des bookmakers pour une prédiction plus précise?\n\n"
-        "*Conseil:* Les cotes améliorent la qualité des prédictions en tenant compte des probabilités du marché.",
+        "💰 *Entrez les cotes des bookmakers pour une prédiction précise*\n\n"
+        "_Conseil_: Les cotes *améliorent significativement* la qualité des prédictions en tenant compte des probabilités du marché.",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -555,7 +553,8 @@ async def handle_odds_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if odds1 < 1.01 or odds2 < 1.01:
         await update.message.reply_text(
             "⚠️ *Cotes invalides*\n\n"
-            "Les cotes doivent être supérieures à 1.01.",
+            "Les cotes doivent être supérieures à 1.01.\n\n"
+            "Veuillez réessayer:",
             parse_mode='Markdown'
         )
         return ENTERING_ODDS
@@ -604,11 +603,13 @@ async def generate_prediction(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton("🔙 Retour au menu", callback_data="back_to_menu")]
     ]
     
-    await message.edit_text(prediction_text,
+    await message.edit_text(
+        prediction_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
     
+    # Enregistrer la prédiction dans les logs
     # Enregistrer la prédiction dans les logs
     user = update.effective_user
     save_prediction_log(
@@ -620,7 +621,8 @@ async def generate_prediction(update: Update, context: ContextTypes.DEFAULT_TYPE
         odds2=odds2,
         prediction_result=prediction
     )
-    # Traitement des prédictions simples
+
+# Traitement des prédictions simples
 async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Traite la commande /predict pour les prédictions de match."""
     user_id = update.effective_user.id
@@ -663,47 +665,25 @@ async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     team1 = teams[0].strip()
     team2 = teams[1].strip()
     
-    # Afficher un message de chargement
-    loading_message = await update.message.reply_text(
-        "⏳ *Analyse en cours*, veuillez patienter...",
+    # Stocker les équipes pour demander les cotes (obligatoire)
+    context.user_data["team1"] = team1
+    context.user_data["team2"] = team2
+    context.user_data["entering_odds"] = True
+    
+    # Demander les cotes à l'utilisateur
+    await update.message.reply_text(
+        f"⚽ *Match sélectionné: {team1} vs {team2}*\n\n"
+        "💰 *Entrez les cotes*\n\n"
+        "Veuillez envoyer les cotes au format suivant:\n"
+        "`cote1 cote2`\n\n"
+        "Exemple: `1.85 3.4`\n\n"
+        "Ces cotes correspondent respectivement à:\n"
+        f"• *{team1}*: cote1\n"
+        f"• *{team2}*: cote2",
         parse_mode='Markdown'
     )
     
-    # Obtenir la prédiction
-    prediction = predictor.predict_match(team1, team2)
-    
-    # Si la prédiction a échoué
-    if not prediction or "error" in prediction:
-        await loading_message.edit_text(
-            f"❌ *Impossible de générer une prédiction*:\n"
-            f"{prediction.get('error', 'Erreur inconnue')}",
-            parse_mode='Markdown'
-        )
-        return
-    
-    # Formater et envoyer la prédiction
-    prediction_text = format_prediction_message(prediction)
-    
-    keyboard = [
-        [InlineKeyboardButton("🔮 Nouvelle Prédiction", callback_data="start_prediction")],
-        [InlineKeyboardButton("🔙 Menu Principal", callback_data="back_to_menu")]
-    ]
-    
-    await loading_message.edit_text(
-        prediction_text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-    
-    # Enregistrer la prédiction dans les logs
-    user = update.message.from_user
-    save_prediction_log(
-        user_id=user.id,
-        username=user.username,
-        team1=team1,
-        team2=team2,
-        prediction_result=prediction
-    )
+    return ENTERING_ODDS
 
 # Traitement des prédictions avec cotes
 async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -758,9 +738,25 @@ async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     if len(odds_matches) < 2:
         # Si les cotes ne sont pas correctement formatées
+        context.user_data["team1"] = team1
         team2 = " ".join(message_parts[separator_index+1:]).strip()
-        odds1 = None
-        odds2 = None
+        context.user_data["team2"] = team2
+        context.user_data["entering_odds"] = True
+        
+        # Demander les cotes à l'utilisateur
+        await update.message.reply_text(
+            f"⚽ *Match sélectionné: {team1} vs {team2}*\n\n"
+            "💰 *Entrez les cotes*\n\n"
+            "Veuillez envoyer les cotes au format suivant:\n"
+            "`cote1 cote2`\n\n"
+            "Exemple: `1.85 3.4`\n\n"
+            "Ces cotes correspondent respectivement à:\n"
+            f"• *{team1}*: cote1\n"
+            f"• *{team2}*: cote2",
+            parse_mode='Markdown'
+        )
+        
+        return ENTERING_ODDS
     else:
         # Extraire les deux dernières cotes trouvées
         odds1 = float(odds_matches[-2])
@@ -926,7 +922,11 @@ def main() -> None:
 
         # Ajouter le gestionnaire de conversation pour les cotes
         conv_handler = ConversationHandler(
-            entry_points=[CallbackQueryHandler(button_click, pattern="^enter_odds$")],
+            entry_points=[
+                CallbackQueryHandler(button_click, pattern="^enter_odds$"),
+                CommandHandler("predict", predict_command),
+                CallbackQueryHandler(button_click, pattern="^predict_")
+            ],
             states={
                 ENTERING_ODDS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_odds_input)],
             },
@@ -938,7 +938,6 @@ def main() -> None:
         # Ajouter les gestionnaires de commandes
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("predict", predict_command))
         application.add_handler(CommandHandler("odds", odds_command))
         application.add_handler(CommandHandler("teams", teams_command))
         application.add_handler(CommandHandler("check", check_subscription_command))

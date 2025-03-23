@@ -1,7 +1,7 @@
 import logging
 import re
 from typing import Dict, List, Optional, Tuple, Any
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -81,7 +81,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Envoie un message d'aide quand la commande /help est envoyée."""
-    await update.message.reply_text(HELP_MESSAGE, parse_mode='Markdown')
+    help_text = """
+🔮 *Commandes disponibles*:
+
+• `/start` - Démarrer le bot
+• `/help` - Afficher l'aide
+• `/predict [Équipe1] vs [Équipe2]` - Obtenir une prédiction de match
+• `/odds [Équipe1] vs [Équipe2] [cote1] [cote2]` - Prédiction avec les cotes
+• `/teams` - Voir toutes les équipes disponibles
+• `/check` - Vérifier l'abonnement au canal
+
+*Exemples d'utilisation:*
+`/predict Manchester United vs Chelsea`
+`/odds Manchester United vs Chelsea 1.8 3.5`
+
+⚠️ *Important*: Vous devez être abonné au canal @alvecapital1 pour utiliser les fonctionnalités du bot.
+"""
+    await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Gère les erreurs."""
@@ -90,7 +106,8 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update:
         # Envoi d'un message à l'utilisateur
         await update.message.reply_text(
-            "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
+            "❌ *Désolé, une erreur s'est produite*. Veuillez réessayer ou contacter l'administrateur.",
+            parse_mode='Markdown'
         )
 
 # Commande pour vérifier l'abonnement au canal
@@ -123,7 +140,7 @@ async def check_subscription_command(update: Update, context: ContextTypes.DEFAU
         
         await update.message.reply_text(
             f"❌ {error_message}\n\n"
-            "L'abonnement est requis pour accéder aux fonctionnalités premium de FIFA 4x4 Predictor.",
+            "*L'abonnement est obligatoire* pour accéder aux fonctionnalités de FIFA 4x4 Predictor.",
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
@@ -165,7 +182,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                "❌ *Abonnement requis*\n\n"
+                "❌ *Abonnement obligatoire*\n\n"
                 f"{error_message}\n\n"
                 "Pour accéder aux prédictions FIFA 4x4, veuillez d'abord rejoindre notre canal puis cliquer sur 'Vérifier à nouveau'.",
                 reply_markup=reply_markup,
@@ -221,8 +238,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         if not teams:
             await query.edit_message_text(
+                "⚠️ *Aucune équipe trouvée*\n\n"
                 "Aucune équipe n'a été trouvée dans la base de données.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Retour", callback_data="back_to_menu")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Retour", callback_data="back_to_menu")]]),
+                parse_mode='Markdown'
             )
             return
         
@@ -328,8 +347,9 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # Vérifier que les équipes sont différentes
         if team_name == team1:
             await query.edit_message_text(
-                "⚠️ Vous devez sélectionner deux équipes différentes.\n\n"
-                f"Vous avez déjà sélectionné {team1} comme première équipe.",
+                "⚠️ *Équipes identiques*\n\n"
+                "Vous devez sélectionner deux équipes différentes.\n\n"
+                f"Vous avez déjà sélectionné *{team1}* comme première équipe.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Choisir une autre équipe", callback_data="back_to_team2")]]),
                 parse_mode='Markdown'
             )
@@ -352,8 +372,10 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         
         if not team1 or not team2:
             await query.edit_message_text(
-                "⚠️ Une erreur s'est produite. Veuillez recommencer la prédiction.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Retour au menu", callback_data="back_to_menu")]])
+                "⚠️ *Erreur*\n\n"
+                "Une erreur s'est produite. Veuillez recommencer la prédiction.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Retour au menu", callback_data="back_to_menu")]]),
+                parse_mode='Markdown'
             )
             return
         
@@ -370,8 +392,8 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "`cote1 cote2`\n\n"
             "Exemple: `1.85 3.4`\n\n"
             "Ces cotes correspondent respectivement à:\n"
-            f"• {context.user_data.get('team1', 'Équipe 1')}: cote1\n"
-            f"• {context.user_data.get('team2', 'Équipe 2')}: cote2",
+            f"• *{context.user_data.get('team1', 'Équipe 1')}*: cote1\n"
+            f"• *{context.user_data.get('team2', 'Équipe 2')}*: cote2",
             parse_mode='Markdown'
         )
         
@@ -405,14 +427,14 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 return
             
             # Afficher un message de chargement
-            await query.edit_message_text("⏳ Analyse en cours, veuillez patienter...")
+            await query.edit_message_text("⏳ *Analyse en cours*, veuillez patienter...", parse_mode='Markdown')
             
             # Générer la prédiction
             await generate_prediction(update, context, team1, team2)
     
     # Annuler une opération
     elif query.data == "cancel":
-        await query.edit_message_text("Opération annulée.")
+        await query.edit_message_text("❌ *Opération annulée*.", parse_mode='Markdown')
 
 # Fonction pour afficher le sélecteur d'équipes
 async def show_team_selector(update: Update, context: ContextTypes.DEFAULT_TYPE, selecting_team="team1"):
@@ -519,7 +541,8 @@ async def handle_odds_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if not match:
         await update.message.reply_text(
-            "⚠️ Format de cotes invalide. Veuillez entrer deux nombres séparés par un espace.\n\n"
+            "⚠️ *Format de cotes invalide*\n\n"
+            "Veuillez entrer deux nombres séparés par un espace.\n\n"
             "Exemple: `1.85 3.4`",
             parse_mode='Markdown'
         )
@@ -531,7 +554,8 @@ async def handle_odds_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Vérifier que les cotes sont valides
     if odds1 < 1.01 or odds2 < 1.01:
         await update.message.reply_text(
-            "⚠️ Les cotes doivent être supérieures à 1.01.",
+            "⚠️ *Cotes invalides*\n\n"
+            "Les cotes doivent être supérieures à 1.01.",
             parse_mode='Markdown'
         )
         return ENTERING_ODDS
@@ -551,10 +575,14 @@ async def generate_prediction(update: Update, context: ContextTypes.DEFAULT_TYPE
     if update.callback_query:
         message = await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="⏳ Analyse en cours, veuillez patienter..."
+            text="⏳ *Analyse en cours*, veuillez patienter...",
+            parse_mode='Markdown'
         )
     else:
-        message = await update.message.reply_text("⏳ Analyse en cours, veuillez patienter...")
+        message = await update.message.reply_text(
+            "⏳ *Analyse en cours*, veuillez patienter...",
+            parse_mode='Markdown'
+        )
     
     # Obtenir la prédiction
     prediction = predictor.predict_match(team1, team2, odds1, odds2)
@@ -562,8 +590,9 @@ async def generate_prediction(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Si la prédiction a échoué
     if not prediction or "error" in prediction:
         await message.edit_text(
-            f"❌ Impossible de générer une prédiction:\n"
-            f"{prediction.get('error', 'Erreur inconnue')}"
+            f"❌ *Impossible de générer une prédiction*:\n"
+            f"{prediction.get('error', 'Erreur inconnue')}",
+            parse_mode='Markdown'
         )
         return
     
@@ -575,8 +604,7 @@ async def generate_prediction(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton("🔙 Retour au menu", callback_data="back_to_menu")]
     ]
     
-    await message.edit_text(
-        prediction_text,
+    await message.edit_text(prediction_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -592,8 +620,7 @@ async def generate_prediction(update: Update, context: ContextTypes.DEFAULT_TYPE
         odds2=odds2,
         prediction_result=prediction
     )
-
-# Traitement des prédictions simples
+    # Traitement des prédictions simples
 async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Traite la commande /predict pour les prédictions de match."""
     user_id = update.effective_user.id
@@ -618,7 +645,6 @@ async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     
     # Extraire les équipes du message
-    # Extraire les équipes du message
     message_text = update.message.text[9:].strip()  # Enlever '/predict '
     
     # Essayer de trouver les noms d'équipes séparés par "vs" ou "contre"
@@ -627,8 +653,10 @@ async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if len(teams) != 2 or not teams[0] or not teams[1]:
         # Si le format n'est pas correct, demander à l'utilisateur de réessayer
         await update.message.reply_text(
-            "Format incorrect. Veuillez utiliser: /predict Équipe1 vs Équipe2\n"
-            "Exemple: /predict Manchester United vs Chelsea"
+            "❌ *Format incorrect*\n\n"
+            "Veuillez utiliser: `/predict Équipe1 vs Équipe2`\n"
+            "Exemple: `/predict Manchester United vs Chelsea`",
+            parse_mode='Markdown'
         )
         return
     
@@ -636,7 +664,10 @@ async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     team2 = teams[1].strip()
     
     # Afficher un message de chargement
-    loading_message = await update.message.reply_text("⏳ Analyse en cours, veuillez patienter...")
+    loading_message = await update.message.reply_text(
+        "⏳ *Analyse en cours*, veuillez patienter...",
+        parse_mode='Markdown'
+    )
     
     # Obtenir la prédiction
     prediction = predictor.predict_match(team1, team2)
@@ -644,8 +675,9 @@ async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Si la prédiction a échoué
     if not prediction or "error" in prediction:
         await loading_message.edit_text(
-            f"❌ Impossible de générer une prédiction:\n"
-            f"{prediction.get('error', 'Erreur inconnue')}"
+            f"❌ *Impossible de générer une prédiction*:\n"
+            f"{prediction.get('error', 'Erreur inconnue')}",
+            parse_mode='Markdown'
         )
         return
     
@@ -710,8 +742,10 @@ async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if separator_index == -1 or separator_index == 0 or separator_index == len(message_parts) - 1:
         # Si le format n'est pas correct, demander à l'utilisateur de réessayer
         await update.message.reply_text(
-            "Format incorrect. Veuillez utiliser: /odds Équipe1 vs Équipe2 cote1 cote2\n"
-            "Exemple: /odds Manchester United vs Chelsea 1.8 3.5"
+            "❌ *Format incorrect*\n\n"
+            "Veuillez utiliser: `/odds Équipe1 vs Équipe2 cote1 cote2`\n"
+            "Exemple: `/odds Manchester United vs Chelsea 1.8 3.5`",
+            parse_mode='Markdown'
         )
         return
     
@@ -740,7 +774,10 @@ async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         team2 = team2_text.rstrip("- ,").strip()
     
     # Afficher un message de chargement
-    loading_message = await update.message.reply_text("⏳ Analyse en cours, veuillez patienter...")
+    loading_message = await update.message.reply_text(
+        "⏳ *Analyse en cours*, veuillez patienter...",
+        parse_mode='Markdown'
+    )
     
     # Obtenir la prédiction avec les cotes
     prediction = predictor.predict_match(team1, team2, odds1, odds2)
@@ -748,8 +785,9 @@ async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Si la prédiction a échoué
     if not prediction or "error" in prediction:
         await loading_message.edit_text(
-            f"❌ Impossible de générer une prédiction:\n"
-            f"{prediction.get('error', 'Erreur inconnue')}"
+            f"❌ *Impossible de générer une prédiction*:\n"
+            f"{prediction.get('error', 'Erreur inconnue')}",
+            parse_mode='Markdown'
         )
         return
     
@@ -847,7 +885,10 @@ async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     teams = get_all_teams()
     
     if not teams:
-        await update.message.reply_text("Aucune équipe n'a été trouvée dans la base de données.")
+        await update.message.reply_text(
+            "⚠️ Aucune équipe n'a été trouvée dans la base de données.",
+            parse_mode='Markdown'
+        )
         return
     
     # Formater la liste des équipes

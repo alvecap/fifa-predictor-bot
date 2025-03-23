@@ -327,36 +327,6 @@ class MatchPredictor:
         
         return prediction_results
 
-def get_over_under_recommendation(avg_goals, threshold=None):
-    """Calcule une recommandation pour les paris Over/Under basée sur la moyenne des buts"""
-    if threshold is None:
-        # Déterminer le seuil approprié
-        if avg_goals < 1.5:
-            threshold = 1.5
-        elif avg_goals < 2.5:
-            threshold = 2.5
-        elif avg_goals < 3.5:
-            threshold = 3.5
-        else:
-            threshold = 4.5
-    
-    # Calculer la probabilité approximative
-    probability = 50 + min(40, max(-40, (avg_goals - threshold) * 20))
-    
-    # Déterminer la recommandation
-    if avg_goals > threshold:
-        return {
-            "line": threshold,
-            "recommendation": "Over",
-            "probability": round(probability)
-        }
-    else:
-        return {
-            "line": threshold,
-            "recommendation": "Under",
-            "probability": round(100 - probability)
-        }
-
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
     """Formate le résultat de prédiction en message lisible et concis"""
     if "error" in prediction:
@@ -371,7 +341,7 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
         f"🔮 *FIFA 4x4 PRÉDICTION*",
         f"",
         f"⚽ *{team1}* vs *{team2}*",
-        f"📊 Fiabilité: {prediction['confidence_level']}% | 🤝 Confrontations: {prediction['direct_matches']}",
+        f"📊 Fiabilité: *{prediction['confidence_level']}%* | 🤝 Confrontations: *{prediction['direct_matches']}*",
         f""
     ]
     
@@ -381,42 +351,75 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     
     if winner_ft["team"]:
         if winner_ft["team"] == "Nul":
-            result_section.append(f"🔹 *Prédiction*: Match nul ({winner_ft['probability']}%)")
+            result_section.append(f"🔹 *Prédiction*: Match nul (*{winner_ft['probability']}%*)")
         else:
-            result_section.append(f"🔹 *Prédiction*: Victoire *{winner_ft['team']}* ({winner_ft['probability']}%)")
+            result_section.append(f"🔹 *Prédiction*: Victoire *{winner_ft['team']}* (*{winner_ft['probability']}%*)")
     
     # Ajouter les scores probables (max 2)
     if prediction["full_time_scores"]:
         scores = []
         for i, score_data in enumerate(prediction["full_time_scores"][:2]):
-            scores.append(f"*{score_data['score']}* ({score_data['confidence']}%)")
+            scores.append(f"*{score_data['score']}* (*{score_data['confidence']}%*)")
         result_section.append(f"🔹 *Scores probables*: {' ou '.join(scores)}")
     
     # Ajouter les buts (Over/Under)
     avg_goals_ft = prediction["avg_goals_full_time"]
-    ou_recommendation = get_over_under_recommendation(avg_goals_ft)
-    result_section.append(f"🔹 *Buts*: {ou_recommendation['recommendation']} {ou_recommendation['line']} ({ou_recommendation['probability']}%)")
+    
+    # Déterminer le seuil approprié pour Over/Under
+    if avg_goals_ft < 1.5:
+        threshold = 1.5
+        is_over = avg_goals_ft > threshold
+        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
+    elif avg_goals_ft < 2.5:
+        threshold = 2.5
+        is_over = avg_goals_ft > threshold
+        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
+    elif avg_goals_ft < 3.5:
+        threshold = 3.5
+        is_over = avg_goals_ft > threshold
+        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
+    else:
+        threshold = 4.5
+        is_over = avg_goals_ft > threshold
+        probability = 40 + min(50, max(-40, (avg_goals_ft - threshold) * 25))
+    
+    if is_over:
+        result_section.append(f"🔹 *Buts*: Plus de {threshold} (*{round(probability)}%*)")
+    else:
+        result_section.append(f"🔹 *Buts*: Moins de {threshold} (*{round(100-probability)}%*)")
     
     # Section 2: Mi-temps
-    halftime_section = ["\n*⏱️ PRÉDICTION MI-TEMPS*"]
+    halftime_section = ["", "*⏱️ PRÉDICTION MI-TEMPS*"]
     
     # Vainqueur à la mi-temps
     winner_ht = prediction["winner_half_time"]
     if winner_ht["team"]:
         if winner_ht["team"] == "Nul":
-            halftime_section.append(f"🔹 *Prédiction*: Match nul ({winner_ht['probability']}%)")
+            halftime_section.append(f"🔹 *Prédiction*: Match nul à la mi-temps (*{winner_ht['probability']}%*)")
         else:
-            halftime_section.append(f"🔹 *Prédiction*: Avantage *{winner_ht['team']}* ({winner_ht['probability']}%)")
+            halftime_section.append(f"🔹 *Prédiction*: Avantage *{winner_ht['team']}* à la mi-temps (*{winner_ht['probability']}%*)")
     
     # Ajouter le score le plus probable de mi-temps
     if prediction["half_time_scores"]:
         score_data = prediction["half_time_scores"][0]
-        halftime_section.append(f"🔹 *Score probable*: *{score_data['score']}* ({score_data['confidence']}%)")
+        halftime_section.append(f"🔹 *Score probable*: *{score_data['score']}* (*{score_data['confidence']}%*)")
     
     # Ajouter les buts de mi-temps (Over/Under)
     avg_goals_ht = prediction["avg_goals_half_time"]
-    ou_recommendation_ht = get_over_under_recommendation(avg_goals_ht, threshold=1.5 if avg_goals_ht < 2 else 2.5)
-    halftime_section.append(f"🔹 *Buts*: {ou_recommendation_ht['recommendation']} {ou_recommendation_ht['line']} ({ou_recommendation_ht['probability']}%)")
+    
+    # Déterminer le seuil pour la mi-temps
+    if avg_goals_ht < 1.5:
+        threshold_ht = 1.5
+    else:
+        threshold_ht = 2.5
+    
+    is_over_ht = avg_goals_ht > threshold_ht
+    probability_ht = 40 + min(50, max(-40, (avg_goals_ht - threshold_ht) * 30))
+    
+    if is_over_ht:
+        halftime_section.append(f"🔹 *Buts mi-temps*: Plus de {threshold_ht} (*{round(probability_ht)}%*)")
+    else:
+        halftime_section.append(f"🔹 *Buts mi-temps*: Moins de {threshold_ht} (*{round(100-probability_ht)}%*)")
     
     # Section cotes (si disponibles)
     odds_section = []
@@ -438,9 +441,9 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     # Conseil 1: Résultat match
     if winner_ft["team"] and winner_ft["probability"] > 65:
         if winner_ft["team"] == "Nul":
-            tips_section.append(f"🔸 *Match nul* ({winner_ft['probability']}%)")
+            tips_section.append(f"🔸 *Match nul* (*{winner_ft['probability']}%*)")
         else:
-            tips_section.append(f"🔸 *Victoire {winner_ft['team']}* ({winner_ft['probability']}%)")
+            tips_section.append(f"🔸 *Victoire {winner_ft['team']}* (*{winner_ft['probability']}%*)")
     elif winner_ft["team"] and winner_ft["probability"] > 55:
         if winner_ft["team"] == "Nul":
             tips_section.append(f"🔸 *Double chance*: {team1} ou Match nul")
@@ -449,8 +452,10 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
             tips_section.append(f"🔸 *Double chance*: {winner_ft['team']} ou Match nul")
     
     # Conseil 2: Nombre de buts
-    if ou_recommendation["probability"] > 65:
-        tips_section.append(f"🔸 *Buts*: {ou_recommendation['recommendation']} {ou_recommendation['line']} ({ou_recommendation['probability']}%)")
+    if is_over and probability > 65:
+        tips_section.append(f"🔸 *Plus de {threshold} buts* (*{round(probability)}%*)")
+    elif not is_over and (100-probability) > 65:
+        tips_section.append(f"🔸 *Moins de {threshold} buts* (*{round(100-probability)}%*)")
     
     # Conseil 3: Les deux équipes marquent?
     both_teams_score = False

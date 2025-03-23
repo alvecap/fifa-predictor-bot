@@ -2,6 +2,7 @@ from collections import defaultdict, Counter
 import logging
 from typing import Dict, List, Tuple, Optional, Any
 import math
+import re
 from config import MAX_PREDICTIONS_HALF_TIME, MAX_PREDICTIONS_FULL_TIME
 from database import (
     get_all_matches_data, get_team_statistics, 
@@ -22,30 +23,106 @@ class MatchPredictor:
         self.matches = get_all_matches_data()
         self.team_stats = None
         self.match_id_trends = None
+        self.teams_mapping = {}  # Dictionnaire pour normaliser les noms d'équipes
         
         if self.matches:
             # Pré-calculer les statistiques pour améliorer les performances
             self.team_stats = get_team_statistics(self.matches)
             self.match_id_trends = get_match_id_trends(self.matches)
+            
+            # Créer un dictionnaire de correspondance des noms d'équipes
+            if self.team_stats:
+                self._create_teams_mapping()
         else:
             logger.warning("Aucune donnée de match disponible!")
 
-    def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
-        """Prédit le résultat d'un match entre team1 et team2"""
-        logger.info(f"Analyse du match: {team1} vs {team2}")
+    def _create_teams_mapping(self):
+        """Crée un dictionnaire de correspondance pour gérer les variations de noms d'équipes"""
+        for team_name in self.team_stats.keys():
+            # Version normalisée (minuscules, sans caractères spéciaux)
+            normalized_name = self._normalize_team_name(team_name)
+            self.teams_mapping[normalized_name] = team_name
+            
+            # Ajouter aussi la version sans espaces
+            no_spaces = normalized_name.replace(" ", "")
+            self.teams_mapping[no_spaces] = team_name
+            
+            # Ajouter la version avec underscores à la place des espaces
+            with_underscores = normalized_name.replace(" ", "_")
+            self.teams_mapping[with_underscores] = team_name
+
+    def _normalize_team_name(self, team_name):
+        """Normalise le nom d'une équipe pour faciliter la correspondance"""
+        if not team_name:
+            return ""
         
-        # Vérifier si les équipes existent dans nos données
-        if not self.team_stats:
-            logger.error("Statistiques d'équipes non disponibles")
+        # Convertir en minuscules et supprimer les caractères spéciaux
+        normalized = team_name.lower()
+        normalized = re.sub(r'[^\w\s]', '', normalized)
+        normalized = normalized.strip()
+        
+        return normalized
+
+    def _get_canonical_team_name(self, team_name):
+        """Obtient le nom canonique d'une équipe à partir du nom fourni par l'utilisateur"""
+        if not team_name:
             return None
             
-        if team1 not in self.team_stats:
+        # D'abord, vérifier si le nom tel quel existe dans les stats
+        if team_name in self.team_stats:
+            return team_name
+            
+        # Normaliser le nom pour la recherche
+        normalized = self._normalize_team_name(team_name)
+        
+        # Vérifier s'il existe dans notre mapping
+        if normalized in self.teams_mapping:
+            return self.teams_mapping[normalized]
+            
+        # Vérifier sans les espaces ou avec underscores
+        no_spaces = normalized.replace(" ", "")
+        if no_spaces in self.teams_mapping:
+            return self.teams_mapping[no_spaces]
+            
+        with_underscores = normalized.replace(" ", "_")
+        if with_underscores in self.teams_mapping:
+            return self.teams_mapping[with_underscores]
+        
+        # Recherche partielle si tout le reste échoue
+        for key, value in self.teams_mapping.items():
+            if normalized in key or key in normalized:
+                logger.info(f"Correspondance approximative trouvée: '{team_name}' -> '{value}'")
+                return value
+        
+        return None
+
+    def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
+        """Prédit le résultat d'un match entre team1 et team2"""
+        logger.info(f"Tentative d'analyse du match: {team1} vs {team2}")
+        
+        # Vérifier si les statistiques sont disponibles
+        if not self.team_stats:
+            logger.error("Statistiques d'équipes non disponibles")
+            return {"error": "Données d'équipes non disponibles. Veuillez réessayer ultérieurement."}
+        
+        # Obtenir les noms canoniques des équipes
+        canonical_team1 = self._get_canonical_team_name(team1)
+        canonical_team2 = self._get_canonical_team_name(team2)
+        
+        logger.info(f"Noms canoniques: {team1} -> {canonical_team1}, {team2} -> {canonical_team2}")
+        
+        # Vérifier si les équipes existent dans nos données
+        if not canonical_team1:
             logger.warning(f"Équipe '{team1}' non trouvée dans les données historiques")
             return {"error": f"Équipe '{team1}' non trouvée dans notre base de données"}
         
-        if team2 not in self.team_stats:
+        if not canonical_team2:
             logger.warning(f"Équipe '{team2}' non trouvée dans les données historiques")
             return {"error": f"Équipe '{team2}' non trouvée dans notre base de données"}
+        
+        # Utiliser les noms canoniques pour le reste du traitement
+        team1 = canonical_team1
+        team2 = canonical_team2
         
         # Récupérer les confrontations directes
         direct_matches = get_direct_confrontations(self.matches, team1, team2)
@@ -95,8 +172,8 @@ class MatchPredictor:
                         if score_1ere:
                             half_parts = score_1ere.split(':')
                             direct_first_half.append(f"{half_parts[1]}:{half_parts[0]}")
-                    except (ValueError, IndexError):
-                        pass
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"Erreur lors de l'analyse du score: {e}")
         
         # Analyse des scores les plus fréquents dans les confrontations directes
         common_direct_final = get_common_scores(direct_final_scores)
@@ -157,8 +234,8 @@ class MatchPredictor:
                         parts = score.split(':')
                         inverted_score = f"{parts[1]}:{parts[0]}"
                         all_final_scores.append((inverted_score, pct))
-                    except (ValueError, IndexError):
-                        pass
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"Erreur lors de l'inversion du score: {e}")
             
             # 1ère mi-temps à l'extérieur
             common_away_half = get_common_scores(self.team_stats[team2]['away_first_half'])
@@ -168,8 +245,8 @@ class MatchPredictor:
                         parts = score.split(':')
                         inverted_score = f"{parts[1]}:{parts[0]}"
                         all_half_scores.append((inverted_score, pct))
-                    except (ValueError, IndexError):
-                        pass
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"Erreur lors de l'inversion du score mi-temps: {e}")
         
         # 3. Ajouter les tendances par numéro de match
         all_match_ids = [match.get('match_id', '') for match in self.matches if match.get('match_id', '')]
@@ -235,7 +312,8 @@ class MatchPredictor:
                             prediction_results["winner_half_time"] = {"team": team2, "probability": confidence}
                         else:
                             prediction_results["winner_half_time"] = {"team": "Nul", "probability": confidence}
-                except (ValueError, IndexError):
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Erreur lors de l'analyse du score mi-temps: {e}")
                     continue
         
         # Prédictions des scores temps réglementaire
@@ -266,7 +344,8 @@ class MatchPredictor:
                             prediction_results["winner_full_time"] = {"team": team2, "probability": confidence}
                         else:
                             prediction_results["winner_full_time"] = {"team": "Nul", "probability": confidence}
-                except (ValueError, IndexError):
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Erreur lors de l'analyse du score temps réglementaire: {e}")
                     continue
         
         # Calcul du niveau de confiance global
@@ -314,7 +393,8 @@ class MatchPredictor:
                         confidence_factors.append(85)
                     else:
                         confidence_factors.append(70)
-                except (ValueError, IndexError):
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Erreur lors de l'analyse de la cohérence: {e}")
                     confidence_factors.append(65)
         
         # Calcul de la confiance globale (moyenne pondérée)
@@ -325,73 +405,73 @@ class MatchPredictor:
         prediction_results["avg_goals_half_time"] = round(prediction_results["avg_goals_half_time"], 1)
         prediction_results["avg_goals_full_time"] = round(prediction_results["avg_goals_full_time"], 1)
         
+        logger.info(f"Prédiction générée avec succès pour {team1} vs {team2}")
         return prediction_results
 
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
     """Formate le résultat de prédiction en message lisible"""
-    try:
-        if "error" in prediction:
-            return f"❌ *Erreur*: {prediction['error']}"
+    if not prediction:
+        return "❌ Erreur: Impossible de générer une prédiction"
         
-        teams = prediction["teams"]
-        team1 = teams["team1"]
-        team2 = teams["team2"]
-        
-        message = [
-            f"🔮 *PRÉDICTION: {team1} vs {team2}*",
-            f"📊 Niveau de confiance: *{prediction['confidence_level']}%*",
-            f"🤝 Confrontations directes: *{prediction['direct_matches']}*",
-            "\n"
-        ]
-        
-        # Section 1: Scores exacts à la première mi-temps
-        message.append("*⏱️ SCORES PRÉVUS (1ÈRE MI-TEMPS):*")
-        if prediction["half_time_scores"]:
-            for i, score_data in enumerate(prediction["half_time_scores"], 1):
-                message.append(f"  {i}. *{score_data['score']}* (*{score_data['confidence']}%*)")
+    if "error" in prediction:
+        return f"❌ Erreur: {prediction['error']}"
+    
+    teams = prediction["teams"]
+    team1 = teams["team1"]
+    team2 = teams["team2"]
+    
+    message = [
+        f"🔮 *PRÉDICTION: {team1} vs {team2}*",
+        f"📊 Niveau de confiance: {prediction['confidence_level']}%",
+        f"🤝 Confrontations directes: {prediction['direct_matches']}",
+        "\n"
+    ]
+    
+    # Section 1: Scores exacts à la première mi-temps
+    message.append("*⏱️ SCORES PRÉVUS (1ÈRE MI-TEMPS):*")
+    if prediction["half_time_scores"]:
+        for i, score_data in enumerate(prediction["half_time_scores"], 1):
+            message.append(f"  {i}. {score_data['score']} ({score_data['confidence']}%)")
+    else:
+        message.append("  Pas assez de données pour prédire le score à la mi-temps")
+    
+    # Gagnant à la mi-temps
+    winner_ht = prediction["winner_half_time"]
+    if winner_ht["team"]:
+        if winner_ht["team"] == "Nul":
+            message.append(f"  👉 Mi-temps: Match nul probable ({winner_ht['probability']}%)")
         else:
-            message.append("  Pas assez de données pour prédire le score à la mi-temps")
-        
-        # Gagnant à la mi-temps
-        winner_ht = prediction["winner_half_time"]
-        if winner_ht["team"]:
-            if winner_ht["team"] == "Nul":
-                message.append(f"  👉 Mi-temps: Match nul probable (*{winner_ht['probability']}%*)")
-            else:
-                message.append(f"  👉 Mi-temps: *{winner_ht['team']}* gagnant probable (*{winner_ht['probability']}%*)")
-        message.append("")
-        
-        # Section 2: Scores exacts au temps réglementaire
-        message.append("*⚽ SCORES PRÉVUS (TEMPS RÉGLEMENTAIRE):*")
-        if prediction["full_time_scores"]:
-            for i, score_data in enumerate(prediction["full_time_scores"], 1):
-                message.append(f"  {i}. *{score_data['score']}* (*{score_data['confidence']}%*)")
+            message.append(f"  👉 Mi-temps: {winner_ht['team']} gagnant probable ({winner_ht['probability']}%)")
+    message.append("")
+    
+    # Section 2: Scores exacts au temps réglementaire
+    message.append("*⚽ SCORES PRÉVUS (TEMPS RÉGLEMENTAIRE):*")
+    if prediction["full_time_scores"]:
+        for i, score_data in enumerate(prediction["full_time_scores"], 1):
+            message.append(f"  {i}. {score_data['score']} ({score_data['confidence']}%)")
+    else:
+        message.append("  Pas assez de données pour prédire le score final")
+    
+    # Gagnant du match
+    winner_ft = prediction["winner_full_time"]
+    if winner_ft["team"]:
+        if winner_ft["team"] == "Nul":
+            message.append(f"  👉 Résultat final: Match nul probable ({winner_ft['probability']}%)")
         else:
-            message.append("  Pas assez de données pour prédire le score final")
-        
-        # Gagnant du match
-        winner_ft = prediction["winner_full_time"]
-        if winner_ft["team"]:
-            if winner_ft["team"] == "Nul":
-                message.append(f"  👉 Résultat final: Match nul probable (*{winner_ft['probability']}%*)")
-            else:
-                message.append(f"  👉 Résultat final: *{winner_ft['team']}* gagnant probable (*{winner_ft['probability']}%*)")
+            message.append(f"  👉 Résultat final: {winner_ft['team']} gagnant probable ({winner_ft['probability']}%)")
+    message.append("")
+    
+    # Section 3: Statistiques moyennes
+    message.append("*📈 STATISTIQUES MOYENNES:*")
+    message.append(f"  • Buts 1ère mi-temps: {prediction['avg_goals_half_time']}")
+    message.append(f"  • Buts temps réglementaire: {prediction['avg_goals_full_time']}")
+    
+    # Section 4: Information sur les cotes si disponibles
+    odds = prediction["odds"]
+    if odds["team1"] is not None and odds["team2"] is not None:
         message.append("")
-        
-        # Section 3: Statistiques moyennes
-        message.append("*📈 STATISTIQUES MOYENNES:*")
-        message.append(f"  • Buts 1ère mi-temps: *{prediction['avg_goals_half_time']}*")
-        message.append(f"  • Buts temps réglementaire: *{prediction['avg_goals_full_time']}*")
-        
-        # Section 4: Information sur les cotes si disponibles
-        odds = prediction["odds"]
-        if odds["team1"] and odds["team2"]:
-            message.append("")
-            message.append("*💰 COTES:*")
-            message.append(f"  • *{team1}*: {odds['team1']}")
-            message.append(f"  • *{team2}*: {odds['team2']}")
-        
-        return "\n".join(message)
-    except Exception as e:
-        logger.error(f"Erreur lors du formatage de la prédiction: {e}")
-        return "❌ *Erreur lors du formatage de la prédiction*. Veuillez réessayer."
+        message.append("*💰 COTES:*")
+        message.append(f"  • {team1}: {odds['team1']}")
+        message.append(f"  • {team2}: {odds['team2']}")
+    
+    return "\n".join(message)

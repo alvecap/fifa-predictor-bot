@@ -97,7 +97,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             logger.error(f"Erreur lors de l'envoi du message d'erreur: {e}")
 
 # Animation de vérification d'abonnement
-async def animated_subscription_check(message, user_id, edit=False) -> bool:
+async def animated_subscription_check(message, user_id, context=None, edit=False) -> bool:
     """Effectue une vérification d'abonnement avec animation et retourne le résultat."""
     # Message initial
     verify_text = "🔍 *Vérification de votre abonnement*"
@@ -152,9 +152,22 @@ async def animated_subscription_check(message, user_id, edit=False) -> bool:
             disable_web_page_preview=True
         )
         
-        # Démarrer directement la sélection d'équipes après un court délai
-        await asyncio.sleep(1.0)
-        await start_team_selection(message, context, edit=False)
+        # Lancer la sélection d'équipes après un court délai, seulement si le contexte est fourni
+        if context:
+            keyboard = [
+                [InlineKeyboardButton("🏆 Sélectionner les équipes", callback_data="start_prediction")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Envoyer un nouveau message avec le bouton de sélection
+            await asyncio.sleep(0.8)
+            await message.reply_text(
+                "🔮 *Prêt pour une prédiction*\n\n"
+                "Cliquez sur le bouton ci-dessous pour commencer.",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
         return True
     else:
         # Animation d'échec
@@ -219,7 +232,7 @@ async def check_subscription_command(update: Update, context: ContextTypes.DEFAU
     context.user_data["user_id"] = user_id
     
     # Utiliser l'animation de vérification
-    await animated_subscription_check(update.message, user_id)
+    await animated_subscription_check(update.message, user_id, context)
 
 # Lancer une prédiction directement avec la commande predict
 async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -227,13 +240,8 @@ async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = update.effective_user.id
     context.user_data["user_id"] = user_id
     
-    # Utiliser l'animation de vérification
-    is_subscribed = await animated_subscription_check(update.message, user_id)
-    
-    if is_subscribed:
-        # Lancer la sélection des équipes après une courte pause
-        await asyncio.sleep(0.5)
-        await start_team_selection(update.message, context)
+    # Utiliser l'animation de vérification avec le contexte
+    await animated_subscription_check(update.message, user_id, context)
 
 # Gestionnaire des boutons de callback
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -247,8 +255,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data["username"] = query.from_user.username
     
     if query.data == "verify_subscription":
-        # Utiliser l'animation de vérification
-        await animated_subscription_check(query.message, user_id, edit=True)
+        # Utiliser l'animation de vérification avec le contexte
+        await animated_subscription_check(query.message, user_id, context, edit=True)
     
     elif query.data == "start_prediction":
         # Vérifier l'abonnement avant de lancer la prédiction
@@ -407,9 +415,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
         
-        # Animation de vérification succincte et passer directement à la sélection d'équipes
-        context.user_data["selecting_team1"] = True
-        
         # Message de transition
         await query.edit_message_text(
             "🔄 *Lancement d'une nouvelle prédiction...*",
@@ -417,14 +422,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         
         # Court délai et passage à la sélection d'équipe
+        context.user_data["selecting_team1"] = True
         await asyncio.sleep(0.5)
         await start_team_selection(query.message, context, edit=True)
 
 # Fonction pour démarrer la sélection des équipes (première équipe)
 async def start_team_selection(message, context, edit=False, page=0) -> None:
     """Affiche la première page de sélection d'équipe."""
-    context.user_data["selecting_team1"] = True
-    await show_teams_page(message, context, page, edit, is_team1=True)
+    try:
+        context.user_data["selecting_team1"] = True
+        await show_teams_page(message, context, page, edit, is_team1=True)
+    except Exception as e:
+        logger.error(f"Erreur lors du démarrage de la sélection d'équipes: {e}")
+        if edit:
+            await message.edit_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
+        else:
+            await message.reply_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
 
 # Fonction pour afficher une page d'équipes
 async def show_teams_page(message, context, page=0, edit=False, is_team1=True) -> None:
@@ -479,10 +498,23 @@ async def show_teams_page(message, context, page=0, edit=False, is_team1=True) -
         f"Veuillez sélectionner la *{team_type} équipe* pour votre prédiction:"
     )
     
-    if edit:
-        await message.edit_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-    else:
-        await message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    try:
+        if edit:
+            await message.edit_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Erreur lors de l'affichage des équipes: {e}")
+        if edit:
+            await message.edit_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
+        else:
+            await message.reply_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
 
 # Fonction pour démarrer la sélection de la deuxième équipe
 async def start_team2_selection(message, context, edit=False, page=0) -> None:
@@ -576,6 +608,7 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
         return ConversationHandler.END
     
     # Vérifier l'abonnement
+    # Vérifier l'abonnement
     user_id = update.effective_user.id
     is_subscribed = await check_user_subscription(user_id)
     
@@ -631,66 +664,83 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             await loading_message.edit_text(frame, parse_mode='Markdown')
         
         # Génération de la prédiction
-        prediction = predictor.predict_match(team1, team2, odds1, odds2)
-        
-        if not prediction or "error" in prediction:
-            error_msg = prediction.get("error", "Erreur inconnue") if prediction else "Impossible de générer une prédiction"
+        try:
+            prediction = predictor.predict_match(team1, team2, odds1, odds2)
             
-            # Proposer de réessayer
+            if not prediction or "error" in prediction:
+                error_msg = prediction.get("error", "Erreur inconnue") if prediction else "Impossible de générer une prédiction"
+                
+                # Proposer de réessayer
+                keyboard = [
+                    [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await loading_message.edit_text(
+                    f"❌ *Erreur de prédiction*\n\n"
+                    f"{error_msg}\n\n"
+                    f"Veuillez essayer avec d'autres équipes.",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                return ConversationHandler.END
+            
+            # Formater et envoyer la prédiction
+            prediction_text = format_prediction_message(prediction)
+            
+            # Animation finale avant d'afficher le résultat
+            final_frames = [
+                "🎯 *Prédiction prête!*",
+                "✨ *Affichage des résultats...*"
+            ]
+            
+            for frame in final_frames:
+                await asyncio.sleep(0.5)
+                await loading_message.edit_text(frame, parse_mode='Markdown')
+            
+            # Proposer une nouvelle prédiction
             keyboard = [
                 [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await loading_message.edit_text(
-                f"❌ *Erreur de prédiction*\n\n"
-                f"{error_msg}\n\n"
-                f"Veuillez essayer avec d'autres équipes.",
+                prediction_text,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+            # Enregistrer la prédiction dans les logs
+            user_id = context.user_data.get("user_id", update.message.from_user.id)
+            username = context.user_data.get("username", update.message.from_user.username)
+            
+            save_prediction_log(
+                user_id=user_id,
+                username=username,
+                team1=team1,
+                team2=team2,
+                odds1=odds1,
+                odds2=odds2,
+                prediction_result=prediction
+            )
+            
+            return ConversationHandler.END
+        except Exception as e:
+            logger.error(f"Erreur lors de la génération de la prédiction: {e}")
+            
+            # Proposer de réessayer en cas d'erreur
+            keyboard = [
+                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await loading_message.edit_text(
+                "❌ *Une erreur s'est produite lors de la génération de la prédiction*\n\n"
+                "Veuillez réessayer avec d'autres équipes ou contacter l'administrateur.",
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
             return ConversationHandler.END
-        
-        # Formater et envoyer la prédiction
-        prediction_text = format_prediction_message(prediction)
-        
-        # Animation finale avant d'afficher le résultat
-        final_frames = [
-            "🎯 *Prédiction prête!*",
-            "✨ *Affichage des résultats...*"
-        ]
-        
-        for frame in final_frames:
-            await asyncio.sleep(0.5)
-            await loading_message.edit_text(frame, parse_mode='Markdown')
-        
-        # Proposer une nouvelle prédiction
-        keyboard = [
-            [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await loading_message.edit_text(
-            prediction_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        
-        # Enregistrer la prédiction dans les logs
-        user_id = context.user_data.get("user_id", update.message.from_user.id)
-        username = context.user_data.get("username", update.message.from_user.username)
-        
-        save_prediction_log(
-            user_id=user_id,
-            username=username,
-            team1=team1,
-            team2=team2,
-            odds1=odds1,
-            odds2=odds2,
-            prediction_result=prediction
-        )
-        
-        return ConversationHandler.END
     except ValueError:
         await update.message.reply_text(
             "❌ *Format incorrect*\n\n"
@@ -721,7 +771,6 @@ async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Formater la liste des équipes
     teams_text = "📋 *Équipes disponibles dans la base de données:*\n\n"
     
-    # Grouper les équipes par lettre alphabétique
     # Grouper les équipes par lettre alphabétique
     teams_by_letter = {}
     for team in teams:
@@ -832,3 +881,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+    

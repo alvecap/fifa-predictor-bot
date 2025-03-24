@@ -26,29 +26,6 @@ logger = logging.getLogger(__name__)
 # Initialisation du prédicteur
 predictor = MatchPredictor()
 
-# Fonctions de base
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Envoie un message quand la commande /start est envoyée."""
-    # Vérifier l'abonnement avant de démarrer
-    await check_subscription(update, context)
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Envoie un message d'aide quand la commande /help est envoyée."""
-    # Vérifier l'abonnement avant d'afficher l'aide
-    is_subscribed = await check_subscription_status(update.effective_user.id, context)
-    if is_subscribed:
-        await update.message.reply_text(HELP_MESSAGE, parse_mode='Markdown')
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gère les erreurs."""
-    logger.error(f"Une erreur est survenue: {context.error}")
-    
-    if update:
-        # Envoi d'un message à l'utilisateur
-        await update.message.reply_text(
-            "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
-        )
-
 # Vérification du statut d'abonnement
 async def check_subscription_status(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """Vérifie si l'utilisateur est abonné au canal @alvecapital1."""
@@ -64,9 +41,44 @@ async def check_subscription_status(user_id: int, context: ContextTypes.DEFAULT_
         logger.error(f"Erreur lors de la vérification d'abonnement: {e}")
         return False
 
+# Fonctions de base
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Envoie un message quand la commande /start est envoyée."""
+    # Vérifier l'abonnement avant de démarrer
+    await check_subscription_command(update, context)
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Envoie un message d'aide quand la commande /help est envoyée."""
+    # Vérifier l'abonnement avant d'afficher l'aide
+    is_subscribed = await check_subscription_status(update.effective_user.id, context)
+    if is_subscribed:
+        await update.message.reply_text(HELP_MESSAGE, parse_mode='Markdown')
+    else:
+        # Demander à l'utilisateur de s'abonner d'abord
+        keyboard = [
+            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "❌ Vous devez être abonné au canal @alvecapital1 pour utiliser cette fonctionnalité.\n\n"
+            "Veuillez vous abonner et réessayer.",
+            reply_markup=reply_markup
+        )
+
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gère les erreurs."""
+    logger.error(f"Une erreur est survenue: {context.error}")
+    
+    if update:
+        # Envoi d'un message à l'utilisateur
+        await update.message.reply_text(
+            "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
+        )
+
 # Commande pour vérifier l'abonnement au canal
-async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Vérifie si l'utilisateur est abonné au canal @alvecapital1 et informe l'utilisateur."""
+async def check_subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Vérifie si l'utilisateur est abonné au canal @alvecapital1."""
     user_id = update.effective_user.id
     
     try:
@@ -768,7 +780,7 @@ def main() -> None:
         application.add_handler(CommandHandler("predict", predict_command))
         application.add_handler(CommandHandler("odds", odds_command))
         application.add_handler(CommandHandler("teams", teams_command))
-        application.add_handler(CommandHandler("check", check_subscription))
+        application.add_handler(CommandHandler("check", check_subscription_command))
         
         # Ajouter le gestionnaire pour les clics sur les boutons
         application.add_handler(CallbackQueryHandler(button_click))

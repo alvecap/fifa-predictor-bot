@@ -278,59 +278,6 @@ async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         prediction_result=prediction
     )
 
-# Fonction pour réagir aux messages non reconnus comme commandes
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Répond aux messages qui ne sont pas des commandes."""
-    # Vérifier si nous attendons des cotes
-    if context.user_data.get('waiting_for_odds'):
-        await process_odds_input(update, context)
-        return
-    
-    message_text = update.message.text.strip()
-    
-    # Rechercher si le message ressemble à une demande de prédiction
-    if " vs " in message_text or " contre " in message_text:
-        # Vérifier l'abonnement d'abord
-        is_subscribed = await check_subscription_status(update.effective_user.id, context)
-        if not is_subscribed:
-            # Demander à l'utilisateur de s'abonner d'abord
-            keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                "❌ Vous devez être abonné au canal @alvecapital1 pour utiliser cette fonctionnalité.\n\n"
-                "Veuillez vous abonner et réessayer.",
-                reply_markup=reply_markup
-            )
-            return
-        
-        # Extraire les équipes
-        teams = re.split(r'\s+(?:vs|contre|VS|CONTRE)\s+', message_text)
-        
-        if len(teams) == 2 and teams[0] and teams[1]:
-            # Créer des boutons pour confirmer la prédiction
-            keyboard = [
-                [InlineKeyboardButton("✅ Prédire ce match", callback_data=f"predict_{teams[0]}_{teams[1]}")],
-                [InlineKeyboardButton("❌ Annuler", callback_data="cancel")]
-            ]
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await update.message.reply_text(
-                f"Souhaitez-vous obtenir une prédiction pour le match:\n\n"
-                f"*{teams[0]} vs {teams[1]}*?",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-            return
-    
-    # Message par défaut si aucune action n'est déclenchée
-    await update.message.reply_text(
-        "Je ne comprends pas cette commande. Utilisez /help pour voir les commandes disponibles."
-    )
-
 # Traitement des cotes entrées par l'utilisateur
 async def process_odds_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Traite les cotes entrées par l'utilisateur après une demande."""
@@ -409,6 +356,59 @@ async def process_odds_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             odds2=odds2,
             prediction_result=prediction
         )
+
+# Fonction pour réagir aux messages non reconnus comme commandes
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Répond aux messages qui ne sont pas des commandes."""
+    # Vérifier si nous attendons des cotes
+    if context.user_data.get('waiting_for_odds'):
+        await process_odds_input(update, context)
+        return
+    
+    message_text = update.message.text.strip()
+    
+    # Rechercher si le message ressemble à une demande de prédiction
+    if " vs " in message_text or " contre " in message_text:
+        # Vérifier l'abonnement d'abord
+        is_subscribed = await check_subscription_status(update.effective_user.id, context)
+        if not is_subscribed:
+            # Demander à l'utilisateur de s'abonner d'abord
+            keyboard = [
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                "❌ Vous devez être abonné au canal @alvecapital1 pour utiliser cette fonctionnalité.\n\n"
+                "Veuillez vous abonner et réessayer.",
+                reply_markup=reply_markup
+            )
+            return
+        
+        # Extraire les équipes
+        teams = re.split(r'\s+(?:vs|contre|VS|CONTRE)\s+', message_text)
+        
+        if len(teams) == 2 and teams[0] and teams[1]:
+            # Créer des boutons pour confirmer la prédiction
+            keyboard = [
+                [InlineKeyboardButton("✅ Prédire ce match", callback_data=f"predict_{teams[0]}_{teams[1]}")],
+                [InlineKeyboardButton("❌ Annuler", callback_data="cancel")]
+            ]
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                f"Souhaitez-vous obtenir une prédiction pour le match:\n\n"
+                f"*{teams[0]} vs {teams[1]}*?",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            return
+    
+    # Message par défaut si aucune action n'est déclenchée
+    await update.message.reply_text(
+        "Je ne comprends pas cette commande. Utilisez /help pour voir les commandes disponibles."
+    )
 
 # Gestion des clics sur les boutons
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -658,50 +658,51 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             return
         
         # Extraire les équipes du callback_data
-        data_parts = query.data.split("_")
-        if len(data_parts) >= 3:
-            team1 = data_parts[1]
-            team2 = "_".join(data_parts[2:])  # Gérer les noms d'équipe avec des underscores
-            
-            # Afficher un message de chargement
-            await query.edit_message_text("⏳ Analyse en cours, veuillez patienter...")
-            
-            # Obtenir la prédiction
-            prediction = predictor.predict_match(team1, team2)
-            
-            # Si la prédiction a échoué
-            if not prediction or "error" in prediction:
-                await query.edit_message_text(
-                    f"❌ Impossible de générer une prédiction:\n"
-                    f"{prediction.get('error', 'Erreur inconnue')}"
-                )
-                return
-            
-            # Formater et envoyer la prédiction
-            # Formater et envoyer la prédiction
-prediction_text = format_prediction_message(prediction)
+        # Extraire les équipes du callback_data
+data_parts = query.data.split("_")
+if len(data_parts) >= 3:
+    team1 = data_parts[1]
+    team2 = "_".join(data_parts[2:])  # Gérer les noms d'équipe avec des underscores
+    
+    # Afficher un message de chargement
+    await query.edit_message_text("⏳ Analyse en cours, veuillez patienter...")
+    
+    # Obtenir la prédiction
+    prediction = predictor.predict_match(team1, team2)
+    
+    # Si la prédiction a échoué
+    if not prediction or "error" in prediction:
+        await query.edit_message_text(
+            f"❌ Impossible de générer une prédiction:\n"
+            f"{prediction.get('error', 'Erreur inconnue')}"
+        )
+        return
+    
+    # Formater et envoyer la prédiction
+    prediction_text = format_prediction_message(prediction)
+    
+    # Ajouter un bouton pour une nouvelle prédiction
+    keyboard = [
+        [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        prediction_text, 
+        parse_mode='Markdown',
+        reply_markup=reply_markup
+    )
+    
+    # Enregistrer la prédiction dans les logs
+    user = update.effective_user
+    save_prediction_log(
+        user_id=user.id,
+        username=user.username,
+        team1=team1,
+        team2=team2,
+        prediction_result=prediction
+    )
 
-# Ajouter un bouton pour une nouvelle prédiction
-keyboard = [
-    [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
-]
-reply_markup = InlineKeyboardMarkup(keyboard)
-
-await query.edit_message_text(
-    prediction_text, 
-    parse_mode='Markdown',
-    reply_markup=reply_markup
-)
-
-# Enregistrer la prédiction dans les logs
-user = update.effective_user
-save_prediction_log(
-    user_id=user.id,
-    username=user.username,
-    team1=team1,
-    team2=team2,
-    prediction_result=prediction
-)
 # Fonction pour lister les équipes disponibles
 async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Affiche la liste des équipes disponibles dans la base de données."""

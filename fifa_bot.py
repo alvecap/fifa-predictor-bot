@@ -281,6 +281,11 @@ async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # Fonction pour réagir aux messages non reconnus comme commandes
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Répond aux messages qui ne sont pas des commandes."""
+    # Vérifier si nous attendons des cotes
+    if context.user_data.get('waiting_for_odds'):
+        await process_odds_input(update, context)
+        return
+    
     message_text = update.message.text.strip()
     
     # Rechercher si le message ressemble à une demande de prédiction
@@ -325,6 +330,85 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(
         "Je ne comprends pas cette commande. Utilisez /help pour voir les commandes disponibles."
     )
+
+# Traitement des cotes entrées par l'utilisateur
+async def process_odds_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Traite les cotes entrées par l'utilisateur après une demande."""
+    # Vérifier si nous attendons des cotes
+    if context.user_data.get('waiting_for_odds'):
+        # Récupérer les informations du match
+        match_info = context.user_data.get('match_info', '')
+        if not match_info:
+            await update.message.reply_text("Une erreur est survenue. Veuillez recommencer la prédiction.")
+            return
+        
+        # Extraire les équipes
+        parts = match_info.split("_vs_")
+        if len(parts) != 2:
+            await update.message.reply_text("Une erreur est survenue. Veuillez recommencer la prédiction.")
+            return
+        
+        team1 = parts[0]
+        team2 = parts[1]
+        
+        # Extraire les cotes du message
+        odds_pattern = r'(\d+\.\d+)'
+        odds_matches = re.findall(odds_pattern, update.message.text)
+        
+        if len(odds_matches) < 2:
+            await update.message.reply_text(
+                "Format de cotes incorrect. Veuillez entrer les cotes au format: cote1 cote2\n"
+                "Exemple: 1.85 2.30"
+            )
+            return
+        
+        odds1 = float(odds_matches[0])
+        odds2 = float(odds_matches[1])
+        
+        # Réinitialiser l'état de conversation
+        context.user_data['waiting_for_odds'] = False
+        context.user_data['match_info'] = None
+        
+        # Afficher un message de chargement
+        loading_message = await update.message.reply_text("⏳ Analyse en cours, veuillez patienter...")
+        
+        # Obtenir la prédiction avec les cotes
+        prediction = predictor.predict_match(team1, team2, odds1, odds2)
+        
+        # Si la prédiction a échoué
+        if not prediction or "error" in prediction:
+            await loading_message.edit_text(
+                f"❌ Impossible de générer une prédiction:\n"
+                f"{prediction.get('error', 'Erreur inconnue')}"
+            )
+            return
+        
+        # Formater et envoyer la prédiction
+        prediction_text = format_prediction_message(prediction)
+        
+        # Ajouter un bouton pour une nouvelle prédiction
+        keyboard = [
+            [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await loading_message.edit_text(
+            prediction_text, 
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
+        
+        # Enregistrer la prédiction dans les logs
+        user = update.message.from_user
+        save_prediction_log(
+            user_id=user.id,
+            username=user.username,
+            team1=team1,
+            team2=team2,
+            odds1=odds1,
+            odds2=odds2,
+            prediction_result=prediction
+        )
 
 # Gestion des clics sur les boutons
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -594,84 +678,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 return
             
             # Formater et envoyer la prédiction
-            prediction_text = format_prediction_message(prediction)
-            
-            # Ajouter un bouton pour une nouvelle prédiction
-            keyboard = [
-                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                prediction_text, 
-                parse_mode='Markdown',
-                reply_markup=reply_markup
-            )
-            
-            # Enregistrer la prédiction dans les logs
-            user = update.effective_user
-            save_prediction_log(
-                user_id=user.id,
-                username=user.username,
-                team1=team1,
-                team2=team2,
-                prediction_result=prediction
-            )
-
-# Traitement des cotes entrées par l'utilisateur
-async def process_odds_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Traite les cotes entrées par l'utilisateur après une demande."""
-    # Vérifier si nous attendons des cotes
-    if context.user_data.get('waiting_for_odds'):
-        # Récupérer les informations du match
-        match_info = context.user_data.get('match_info', '')
-        if not match_info:
-            await update.message.reply_text("Une erreur est survenue. Veuillez recommencer la prédiction.")
-            return
-        
-        # Extraire les équipes
-        parts = match_info.split("_vs_")
-        if len(parts) != 2:
-            await update.message.reply_text("Une erreur est survenue. Veuillez recommencer la prédiction.")
-            return
-        
-        team1 = parts[0]
-        team2 = parts[1]
-        
-        # Extraire les cotes du message
-        odds_pattern = r'(\d+\.\d+)'
-        odds_matches = re.findall(odds_pattern, update.message.text)
-        
-        if len(odds_matches) < 2:
-            await update.message.reply_text(
-                "Format de cotes incorrect. Veuillez entrer les cotes au format: cote1 cote2\n"
-                "Exemple: 1.85 2.30"
-            )
-            return
-        
-        odds1 = float(odds_matches[0])
-        odds2 = float(odds_matches[1])
-        
-        # Réinitialiser l'état de conversation
-        context.user_data['waiting_for_odds'] = False
-        context.user_data['match_info'] = None
-        
-        # Afficher un message de chargement
-        loading_message = await update.message.reply_text("⏳ Analyse en cours, veuillez patienter...")
-        
-        # Obtenir la prédiction avec les cotes
-        # Obtenir la prédiction avec les cotes
-prediction = predictor.predict_match(team1, team2, odds1, odds2)
-
-# Si la prédiction a échoué
-if not prediction or "error" in prediction:
-    await loading_message.edit_text(
-        f"❌ Impossible de générer une prédiction:\n"
-        f"{prediction.get('error', 'Erreur inconnue')}"
-    )
-    return
-
-# Formater et envoyer la prédiction
+            # Formater et envoyer la prédiction
 prediction_text = format_prediction_message(prediction)
 
 # Ajouter un bouton pour une nouvelle prédiction
@@ -680,21 +687,19 @@ keyboard = [
 ]
 reply_markup = InlineKeyboardMarkup(keyboard)
 
-await loading_message.edit_text(
-    prediction_text,
+await query.edit_message_text(
+    prediction_text, 
     parse_mode='Markdown',
     reply_markup=reply_markup
 )
 
 # Enregistrer la prédiction dans les logs
-user = update.message.from_user
+user = update.effective_user
 save_prediction_log(
     user_id=user.id,
     username=user.username,
     team1=team1,
     team2=team2,
-    odds1=odds1,
-    odds2=odds2,
     prediction_result=prediction
 )
 # Fonction pour lister les équipes disponibles
@@ -766,14 +771,6 @@ def main() -> None:
         
         # Ajouter le gestionnaire pour les clics sur les boutons
         application.add_handler(CallbackQueryHandler(button_click))
-        
-        # Gestionnaire pour les entrées de cotes
-        application.add_handler(
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND & filters.UpdateType.MESSAGE,
-                process_odds_input
-            )
-        )
         
         # Ajouter le gestionnaire pour les messages normaux
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

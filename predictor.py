@@ -473,23 +473,29 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     # Section 3: Prédictions recommandées au format paris sportif
     message.append("*📈 PRÉDICTIONS RECOMMANDÉES:*")
     
-    # Format paris sportif pour les buts en 1ère mi-temps
+    # Format paris sportif correct pour les buts en mi-temps
     avg_ht_goals = prediction['avg_goals_half_time']
-    # Choisir une ligne plus élevée pour les prédictions
-    half_time_line = max(1.5, round(avg_ht_goals + 1))
-    # Déterminer si c'est plutôt un over ou under
-    half_time_over_under = "+" if avg_ht_goals > half_time_line else "-"
+    # Calculer la ligne de pari exacte (0.5 près) au lieu de l'arrondir
+    half_time_expected = round(avg_ht_goals)
+    # Déterminer la ligne de pari pour over/under
+    half_time_line = half_time_expected - 0.5 if avg_ht_goals <= half_time_expected else half_time_expected + 0.5
+    # Déterminer si c'est un pari over ou under
+    is_over_ht = avg_ht_goals > half_time_line
+    half_time_label = f"+{half_time_line}" if is_over_ht else f"-{half_time_line}"
     
-    # Pour le temps réglementaire
+    # Format paris sportif correct pour les buts en temps réglementaire
     avg_ft_goals = prediction['avg_goals_full_time']
-    # Choisir une ligne plus élevée pour les prédictions
-    full_time_line = max(2.5, round(avg_ft_goals + 1))
-    # Déterminer si c'est plutôt un over ou under
-    full_time_over_under = "+" if avg_ft_goals > full_time_line else "-"
+    # Calculer la ligne de pari exacte (0.5 près)
+    full_time_expected = round(avg_ft_goals)
+    # Déterminer la ligne de pari pour over/under
+    full_time_line = full_time_expected - 0.5 if avg_ft_goals <= full_time_expected else full_time_expected + 0.5
+    # Déterminer si c'est un pari over ou under
+    is_over_ft = avg_ft_goals > full_time_line
+    full_time_label = f"+{full_time_line}" if is_over_ft else f"-{full_time_line}"
     
-    # Afficher les options de paris sous forme de recommandation unique
-    message.append(f"  • *Mi-temps:* {half_time_over_under}{half_time_line} buts")
-    message.append(f"  • *Temps réglementaire:* {full_time_over_under}{full_time_line} buts")
+    # Afficher les options de paris sous forme de prédictions
+    message.append(f"  • *Mi-temps:* {half_time_label} buts")
+    message.append(f"  • *Temps réglementaire:* {full_time_label} buts")
     message.append("")
     
     # Message de prévention sur les paris sportifs

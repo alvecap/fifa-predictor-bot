@@ -670,51 +670,51 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             return
         
         # Extraire les équipes du callback_data
-        # Extraire les équipes du callback_data
-data_parts = query.data.split("_")
-if len(data_parts) >= 3:
-    team1 = data_parts[1]
-    team2 = "_".join(data_parts[2:])  # Gérer les noms d'équipe avec des underscores
-    
-    # Afficher un message de chargement
-    await query.edit_message_text("⏳ Analyse en cours, veuillez patienter...")
-    
-    # Obtenir la prédiction
-    prediction = predictor.predict_match(team1, team2)
-    
-    # Si la prédiction a échoué
-    if not prediction or "error" in prediction:
-        await query.edit_message_text(
-            f"❌ Impossible de générer une prédiction:\n"
-            f"{prediction.get('error', 'Erreur inconnue')}"
-        )
-        return
-    
-    # Formater et envoyer la prédiction
-    prediction_text = format_prediction_message(prediction)
-    
-    # Ajouter un bouton pour une nouvelle prédiction
-    keyboard = [
-        [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await query.edit_message_text(
-        prediction_text, 
-        parse_mode='Markdown',
-        reply_markup=reply_markup
-    )
-    
-    # Enregistrer la prédiction dans les logs
-    user = update.effective_user
-    save_prediction_log(
-        user_id=user.id,
-        username=user.username,
-        team1=team1,
-        team2=team2,
-        prediction_result=prediction
-    )
-
+        data_parts = query.data.split("_")
+        if len(data_parts) >= 3:
+            team1 = data_parts[1]
+            team2 = "_".join(data_parts[2:])  # Gérer les noms d'équipe avec des underscores
+            
+            # Afficher un message de chargement
+            # Afficher un message de chargement
+            await query.edit_message_text("⏳ Analyse en cours, veuillez patienter...")
+            
+            # Obtenir la prédiction
+            prediction = predictor.predict_match(team1, team2)
+            
+            # Si la prédiction a échoué
+            if not prediction or "error" in prediction:
+                await query.edit_message_text(
+                    f"❌ Impossible de générer une prédiction:\n"
+                    f"{prediction.get('error', 'Erreur inconnue')}"
+                )
+                return
+            
+            # Formater et envoyer la prédiction
+            prediction_text = format_prediction_message(prediction)
+            
+            # Ajouter un bouton pour une nouvelle prédiction
+            keyboard = [
+                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                prediction_text, 
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+            
+            # Enregistrer la prédiction dans les logs
+            user = update.effective_user
+            save_prediction_log(
+                user_id=user.id,
+                username=user.username,
+                team1=team1,
+                team2=team2,
+                prediction_result=prediction
+            )
+            
 # Fonction pour lister les équipes disponibles
 async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Affiche la liste des équipes disponibles dans la base de données."""

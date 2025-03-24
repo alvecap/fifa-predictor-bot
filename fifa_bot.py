@@ -107,7 +107,7 @@ async def animated_subscription_check(message, user_id, edit=False) -> bool:
     else:
         msg = await message.reply_text(verify_text, parse_mode='Markdown')
     
-    # Animation stylée (cercle qui tourne)
+    # Animation stylisée (cercle qui tourne)
     emojis = ["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"]
     
     for i in range(len(emojis)):
@@ -152,17 +152,9 @@ async def animated_subscription_check(message, user_id, edit=False) -> bool:
             disable_web_page_preview=True
         )
         
-        # Nouveau message avec bouton pour commencer une prédiction
-        keyboard = [
-            [InlineKeyboardButton("🔮 Faire une prédiction", callback_data="start_prediction")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await message.reply_text(
-            "🏆 *Que souhaitez-vous faire ?*",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+        # Démarrer directement la sélection d'équipes après un court délai
+        await asyncio.sleep(1.0)
+        await start_team_selection(message, context, edit=False)
         return True
     else:
         # Animation d'échec
@@ -286,7 +278,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif query.data.startswith("teams_page_"):
         # Gestion de la pagination pour les équipes
         page = int(query.data.split("_")[-1])
-        await show_teams_page(query.message, context, page, edit=True)
+        is_team1 = context.user_data.get("selecting_team1", True)
+        await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
     
     elif query.data.startswith("select_team1_"):
         # Vérifier l'abonnement
@@ -311,6 +304,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Extraire le nom de l'équipe 1
         team1 = query.data.replace("select_team1_", "")
         context.user_data["team1"] = team1
+        context.user_data["selecting_team1"] = False
         
         # Animation de sélection
         anim_frames = [
@@ -413,16 +407,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             return
         
-        # Animation de vérification
-        await animated_subscription_check(query.message, user_id, edit=True)
+        # Animation de vérification succincte et passer directement à la sélection d'équipes
+        context.user_data["selecting_team1"] = True
         
-        # Si on arrive ici, l'abonnement est valide car la fonction animated_subscription_check a retourné True
-        # Lancer la sélection des équipes
+        # Message de transition
+        await query.edit_message_text(
+            "🔄 *Lancement d'une nouvelle prédiction...*",
+            parse_mode='Markdown'
+        )
+        
+        # Court délai et passage à la sélection d'équipe
+        await asyncio.sleep(0.5)
         await start_team_selection(query.message, context, edit=True)
 
 # Fonction pour démarrer la sélection des équipes (première équipe)
 async def start_team_selection(message, context, edit=False, page=0) -> None:
     """Affiche la première page de sélection d'équipe."""
+    context.user_data["selecting_team1"] = True
     await show_teams_page(message, context, page, edit, is_team1=True)
 
 # Fonction pour afficher une page d'équipes
@@ -636,7 +637,6 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             error_msg = prediction.get("error", "Erreur inconnue") if prediction else "Impossible de générer une prédiction"
             
             # Proposer de réessayer
-            # Proposer de réessayer
             keyboard = [
                 [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
             ]
@@ -721,6 +721,7 @@ async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Formater la liste des équipes
     teams_text = "📋 *Équipes disponibles dans la base de données:*\n\n"
     
+    # Grouper les équipes par lettre alphabétique
     # Grouper les équipes par lettre alphabétique
     teams_by_letter = {}
     for team in teams:

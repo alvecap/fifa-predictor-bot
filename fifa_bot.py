@@ -1,8 +1,7 @@
 import logging
 import re
-import asyncio
 from typing import Dict, List, Optional, Tuple, Any
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -14,7 +13,7 @@ from telegram.ext import (
 )
 
 from config import TELEGRAM_TOKEN, WELCOME_MESSAGE, HELP_MESSAGE, TEAM_INPUT, ODDS_INPUT
-from database import get_all_teams, save_prediction_log, check_user_subscription
+from database import get_all_teams, save_prediction_log
 from predictor import MatchPredictor, format_prediction_message
 
 # Configuration du logging
@@ -27,745 +26,687 @@ logger = logging.getLogger(__name__)
 # Initialisation du prédicteur
 predictor = MatchPredictor()
 
-# États de conversation
-VERIFY_SUBSCRIPTION = 1
-TEAM_SELECTION = 2
-ODDS_INPUT_TEAM1 = 3
-ODDS_INPUT_TEAM2 = 4
-
-# Constantes pour la pagination des équipes
-TEAMS_PER_PAGE = 8
-
 # Fonctions de base
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Envoie un message quand la commande /start est envoyée."""
-    user = update.effective_user
-    context.user_data["username"] = user.username
-    
-    # Message de bienvenue personnalisé avec un bouton unique
-    welcome_text = f"👋 *AL VE*, Bienvenue sur *FIFA 4x4 Predictor*!\n\n"
-    welcome_text += "🏆 Je vous aide à *prédire les résultats* de matchs de football FIFA 4x4 "
-    welcome_text += "en me basant sur des *données historiques* précises.\n\n"
-    welcome_text += "⚠️ Pour utiliser toutes les fonctionnalités, vous devez être abonné "
-    welcome_text += f"à notre canal [AL VE CAPITAL](https://t.me/alvecapital1)."
-    
-    # Créer un bouton unique pour la vérification
-    keyboard = [
-        [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        welcome_text,
-        parse_mode='Markdown',
-        reply_markup=reply_markup,
-        disable_web_page_preview=True
-    )
+    await update.message.reply_text(WELCOME_MESSAGE)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Envoie un message d'aide quand la commande /help est envoyée."""
-    # Vérifier l'abonnement avant tout
-    user_id = update.effective_user.id
-    is_subscribed = await check_user_subscription(user_id)
-    
-    if not is_subscribed:
-        await send_subscription_required(update.effective_message)
-        return
-    
-    help_text = "*🔮 FIFA 4x4 Predictor - Aide*\n\n"
-    help_text += "*Commandes disponibles:*\n"
-    help_text += "• `/start` - Démarrer le bot\n"
-    help_text += "• `/help` - Afficher ce message d'aide\n"
-    help_text += "• `/predict` - Commencer une prédiction\n"
-    help_text += "• `/teams` - Voir toutes les équipes disponibles\n"
-    help_text += "• `/check` - Vérifier votre abonnement\n\n"
-    help_text += "*Note:* Les cotes sont obligatoires pour obtenir des prédictions précises.\n\n"
-    help_text += "Pour plus de détails, contactez l'administrateur du bot."
-    
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    await update.message.reply_text(HELP_MESSAGE, parse_mode='Markdown')
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Gère les erreurs."""
     logger.error(f"Une erreur est survenue: {context.error}")
     
-    if update and update.effective_message:
-        try:
-            await update.effective_message.reply_text(
-                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
-            )
-        except Exception as e:
-            logger.error(f"Erreur lors de l'envoi du message d'erreur: {e}")
+    if update:
+        # Envoi d'un message à l'utilisateur
+        await update.message.reply_text(
+            "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
+        )
 
-# Animation de vérification d'abonnement
-async def animated_subscription_check(message, user_id, context=None, edit=False) -> bool:
-    """Effectue une vérification d'abonnement avec animation et retourne le résultat."""
-    # Message initial
-    verify_text = "🔍 *Vérification de votre abonnement*"
-    
-    if edit:
-        msg = await message.edit_text(verify_text, parse_mode='Markdown')
-    else:
-        msg = await message.reply_text(verify_text, parse_mode='Markdown')
-    
-    # Animation stylisée (cercle qui tourne)
-    emojis = ["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"]
-    
-    for i in range(len(emojis)):
-        await msg.edit_text(
-            f"{emojis[i]} *Vérification de votre abonnement en cours...*",
-            parse_mode='Markdown'
-        )
-        await asyncio.sleep(0.2)  # Animation rapide mais visible
-    
-    # Animation finale
-    await msg.edit_text(
-        "🔄 *Connexion avec Telegram...*",
-        parse_mode='Markdown'
-    )
-    await asyncio.sleep(0.5)
-    
-    # Effectuer la vérification
-    is_subscribed = await check_user_subscription(user_id)
-    
-    if is_subscribed:
-        # Animation de succès
-        success_frames = [
-            "⬜⬜⬜⬜⬜",
-            "⬛⬜⬜⬜⬜",
-            "⬛⬛⬜⬜⬜",
-            "⬛⬛⬛⬜⬜",
-            "⬛⬛⬛⬛⬜",
-            "⬛⬛⬛⬛⬛",
-            "✅ *Abonnement vérifié!*"
-        ]
+# Fonction pour vérifier si l'utilisateur est abonné au canal
+async def is_user_subscribed(bot, user_id):
+    """Vérifie si l'utilisateur est abonné au canal @alvecapital1."""
+    try:
+        # Vérifier si l'utilisateur est membre du canal
+        chat_member = await bot.get_chat_member(chat_id="@alvecapital1", user_id=user_id)
         
-        for frame in success_frames:
-            await msg.edit_text(frame, parse_mode='Markdown')
-            await asyncio.sleep(0.2)
+        # Statuts indiquant que l'utilisateur est membre
+        member_statuses = ['creator', 'administrator', 'member']
         
-        # Message final de succès
-        await msg.edit_text(
-            "✅ *Abonnement vérifié!*\n\n"
-            "Vous êtes bien abonné à [AL VE CAPITAL](https://t.me/alvecapital1).\n"
-            "Toutes les fonctionnalités sont désormais accessibles.",
-            parse_mode='Markdown',
-            disable_web_page_preview=True
-        )
-        
-        # Lancer la sélection d'équipes après un court délai, seulement si le contexte est fourni
-        if context:
-            keyboard = [
-                [InlineKeyboardButton("🏆 Sélectionner les équipes", callback_data="start_prediction")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            # Envoyer un nouveau message avec le bouton de sélection
-            await asyncio.sleep(0.8)
-            await message.reply_text(
-                "🔮 *Prêt pour une prédiction*\n\n"
-                "Cliquez sur le bouton ci-dessous pour commencer.",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-            
-        return True
-    else:
-        # Animation d'échec
-        error_frames = [
-            "⬜⬜⬜⬜⬜",
-            "⬛⬜⬜⬜⬜",
-            "⬛⬛⬜⬜⬜",
-            "⬛⬛⬛⬜⬜",
-            "⬛⬛⬛⬛⬜",
-            "⬛⬛⬛⬛⬛",
-            "❌ *Abonnement non détecté*"
-        ]
-        
-        for frame in error_frames:
-            await msg.edit_text(frame, parse_mode='Markdown')
-            await asyncio.sleep(0.2)
-        
-        # Message d'erreur
-        keyboard = [
-            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
-            [InlineKeyboardButton("🔍 Vérifier à nouveau", callback_data="verify_subscription")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await msg.edit_text(
-            "❌ *Abonnement non détecté*\n\n"
-            "Vous n'êtes pas encore abonné à [AL VE CAPITAL](https://t.me/alvecapital1).\n\n"
-            "*Instructions:*\n"
-            "1️⃣ Cliquez sur le bouton 'Rejoindre le canal'\n"
-            "2️⃣ Abonnez-vous au canal\n"
-            "3️⃣ Revenez ici et cliquez sur 'Vérifier à nouveau'",
-            reply_markup=reply_markup,
-            parse_mode='Markdown',
-            disable_web_page_preview=True
-        )
-        return False
-
-# Message standard quand l'abonnement est requis
-async def send_subscription_required(message) -> None:
-    """Envoie un message indiquant que l'abonnement est nécessaire."""
-    keyboard = [
-        [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
-        [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await message.reply_text(
-        "⚠️ *Abonnement requis*\n\n"
-        "Pour utiliser cette fonctionnalité, vous devez être abonné à notre canal.\n\n"
-        "*Instructions:*\n"
-        "1️⃣ Rejoignez [AL VE CAPITAL](https://t.me/alvecapital1)\n"
-        "2️⃣ Cliquez sur '🔍 Vérifier mon abonnement'",
-        reply_markup=reply_markup,
-        parse_mode='Markdown',
-        disable_web_page_preview=True
-    )
+        return chat_member.status in member_statuses
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification d'abonnement: {e}")
+        return False  # En cas d'erreur, on suppose que l'utilisateur n'est pas abonné
 
 # Commande pour vérifier l'abonnement au canal
 async def check_subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Vérifie si l'utilisateur est abonné au canal @alvecapital1."""
     user_id = update.effective_user.id
-    context.user_data["user_id"] = user_id
     
-    # Utiliser l'animation de vérification
-    await animated_subscription_check(update.message, user_id, context)
+    # Stocker l'ID du message de vérification pour le retrouver plus tard
+    if 'subscription_message_id' not in context.user_data:
+        context.user_data['subscription_message_id'] = update.message.message_id
+    
+    is_subscribed = await is_user_subscribed(context.bot, user_id)
+    
+    if is_subscribed:
+        # L'utilisateur est abonné
+        await update.message.reply_text(
+            "✅ Félicitations! Vous êtes bien abonné au canal @alvecapital1.\n\n"
+            "Vous pouvez maintenant utiliser toutes les fonctionnalités premium de FIFA 4x4 Predictor."
+        )
+    else:
+        # L'utilisateur n'est pas abonné
+        keyboard = [
+            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+            [InlineKeyboardButton("🔄 Vérifier à nouveau", callback_data="verify_subscription")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "❌ Vous n'êtes pas abonné à notre canal @alvecapital1.\n\n"
+            "L'abonnement est requis pour accéder aux fonctionnalités premium de FIFA 4x4 Predictor.",
+            reply_markup=reply_markup
+        )
 
-# Lancer une prédiction directement avec la commande predict
+# WebApp command
+async def webapp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ouvre la WebApp pour les prédictions FIFA 4x4"""
+    # URL de votre WebApp - remplacez par l'URL réelle après déploiement
+    webapp_url = "https://votre-username.github.io/fifa-predictor-bot/"
+    
+    webapp_button = InlineKeyboardButton(
+        text="📊 Ouvrir l'application de prédiction",
+        web_app=WebAppInfo(url=webapp_url)
+    )
+    
+    keyboard = InlineKeyboardMarkup([[webapp_button]])
+    
+    await update.message.reply_text(
+        "🔮 *FIFA 4x4 PREDICTOR - APPLICATION WEB*\n\n"
+        "Accédez à notre interface de prédiction avancée avec:\n"
+        "• Prédictions de scores précises\n"
+        "• Analyses statistiques détaillées\n"
+        "• Interface utilisateur intuitive\n\n"
+        "Cliquez sur le bouton ci-dessous pour commencer ⬇️",
+        reply_markup=keyboard,
+        parse_mode='Markdown'
+    )
+
+# Traitement des prédictions simples
 async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Lance le processus de prédiction quand la commande /predict est envoyée."""
+    """Traite la commande /predict pour les prédictions de match."""
     user_id = update.effective_user.id
-    context.user_data["user_id"] = user_id
     
-    # Utiliser l'animation de vérification avec le contexte
-    await animated_subscription_check(update.message, user_id, context)
+    # Vérifier d'abord l'abonnement
+    is_subscribed = await is_user_subscribed(context.bot, user_id)
+    if not is_subscribed:
+        keyboard = [
+            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+            [InlineKeyboardButton("🔄 Vérifier à nouveau", callback_data="verify_subscription")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Enregistrer le message et la commande pour réexécution après vérification
+        context.user_data['pending_command'] = 'predict'
+        context.user_data['pending_text'] = update.message.text
+        
+        await update.message.reply_text(
+            "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
+            "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
+            reply_markup=reply_markup
+        )
+        return
+    
+    # Supprimer les anciens messages si nécessaire
+    await clean_old_messages(context)
+    
+    # Extraire les équipes du message
+    message_text = update.message.text[9:].strip()  # Enlever '/predict '
+    
+    # Essayer de trouver les noms d'équipes séparés par "vs" ou "contre"
+    teams = re.split(r'\s+(?:vs|contre|VS|CONTRE)\s+', message_text)
+    
+    if len(teams) != 2 or not teams[0] or not teams[1]:
+        # Si le format n'est pas correct, demander à l'utilisateur de réessayer
+        sent_message = await update.message.reply_text(
+            "Format incorrect. Veuillez utiliser: /predict Équipe1 vs Équipe2\n"
+            "Exemple: /predict Manchester United vs Chelsea"
+        )
+        # Stocker l'ID du message pour le nettoyer plus tard
+        if 'messages_to_delete' not in context.user_data:
+            context.user_data['messages_to_delete'] = []
+        context.user_data['messages_to_delete'].append(sent_message.message_id)
+        return
+    
+    team1 = teams[0].strip()
+    team2 = teams[1].strip()
+    
+    # Afficher un message de chargement
+    loading_message = await update.message.reply_text("⏳ Analyse en cours, veuillez patienter...")
+    
+    # Stocker l'ID du message pour le nettoyer plus tard
+    if 'messages_to_delete' not in context.user_data:
+        context.user_data['messages_to_delete'] = []
+    context.user_data['messages_to_delete'].append(loading_message.message_id)
+    
+    # Obtenir la prédiction
+    prediction = predictor.predict_match(team1, team2)
+    
+    # Si la prédiction a échoué
+    if not prediction or "error" in prediction:
+        error_message = await loading_message.edit_text(
+            f"❌ Impossible de générer une prédiction:\n"
+            f"{prediction.get('error', 'Erreur inconnue')}"
+        )
+        context.user_data['messages_to_delete'].append(error_message.message_id)
+        return
+    
+    # Formater et envoyer la prédiction avec la présentation améliorée
+    prediction_text = format_improved_prediction_message(prediction)
+    result_message = await loading_message.edit_text(prediction_text, parse_mode='Markdown')
+    
+    # Stocker l'ID du message de résultat
+    context.user_data['current_result_message'] = result_message.message_id
+    
+    # Ajouter un bouton pour une nouvelle prédiction
+    keyboard = [
+        [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")],
+        [InlineKeyboardButton("🏠 Retour au menu", callback_data="back_to_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await result_message.edit_reply_markup(reply_markup=reply_markup)
+    
+    # Enregistrer la prédiction dans les logs
+    user = update.message.from_user
+    save_prediction_log(
+        user_id=user.id,
+        username=user.username,
+        team1=team1,
+        team2=team2,
+        prediction_result=prediction
+    )
 
-# Gestionnaire des boutons de callback
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# Traitement des prédictions avec cotes
+async def odds_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Traite la commande /odds pour les prédictions de match avec cotes."""
+    user_id = update.effective_user.id
+    
+    # Vérifier d'abord l'abonnement
+    is_subscribed = await is_user_subscribed(context.bot, user_id)
+    if not is_subscribed:
+        keyboard = [
+            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+            [InlineKeyboardButton("🔄 Vérifier à nouveau", callback_data="verify_subscription")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Enregistrer le message et la commande pour réexécution après vérification
+        context.user_data['pending_command'] = 'odds'
+        context.user_data['pending_text'] = update.message.text
+        
+        await update.message.reply_text(
+            "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
+            "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
+            reply_markup=reply_markup
+        )
+        return
+    
+    # Supprimer les anciens messages si nécessaire
+    await clean_old_messages(context)
+    
+    # Extraire les équipes et les cotes du message
+    message_parts = update.message.text[6:].strip().split()  # Enlever '/odds '
+    
+    # Trouver l'index de "vs" ou "contre"
+    separator_index = -1
+    for i, part in enumerate(message_parts):
+        if part.lower() in ["vs", "contre"]:
+            separator_index = i
+            break
+    
+    if separator_index == -1 or separator_index == 0 or separator_index == len(message_parts) - 1:
+        # Si le format n'est pas correct, demander à l'utilisateur de réessayer
+        sent_message = await update.message.reply_text(
+            "Format incorrect. Veuillez utiliser: /odds Équipe1 vs Équipe2 cote1 cote2\n"
+            "Exemple: /odds Manchester United vs Chelsea 1.8 3.5"
+        )
+        # Stocker l'ID du message pour le nettoyer plus tard
+        if 'messages_to_delete' not in context.user_data:
+            context.user_data['messages_to_delete'] = []
+        context.user_data['messages_to_delete'].append(sent_message.message_id)
+        return
+    
+    # Extraire les noms d'équipes
+    team1 = " ".join(message_parts[:separator_index]).strip()
+    
+    # Chercher les cotes à la fin
+    odds_pattern = r'(\d+\.\d+)'
+    odds_matches = re.findall(odds_pattern, " ".join(message_parts[separator_index+1:]))
+    
+    if len(odds_matches) < 2:
+        # Si les cotes ne sont pas correctement formatées
+        team2 = " ".join(message_parts[separator_index+1:]).strip()
+        odds1 = None
+        odds2 = None
+    else:
+        # Extraire les deux dernières cotes trouvées
+        odds1 = float(odds_matches[-2])
+        odds2 = float(odds_matches[-1])
+        
+        # Extraire le nom de l'équipe 2 en enlevant les cotes
+        team2_parts = message_parts[separator_index+1:]
+        team2_text = " ".join(team2_parts)
+        for odd in odds_matches[-2:]:
+            team2_text = team2_text.replace(odd, "").strip()
+        team2 = team2_text.rstrip("- ,").strip()
+    
+    # Afficher un message de chargement
+    loading_message = await update.message.reply_text("⏳ Analyse en cours, veuillez patienter...")
+    
+    # Stocker l'ID du message pour le nettoyer plus tard
+    if 'messages_to_delete' not in context.user_data:
+        context.user_data['messages_to_delete'] = []
+    context.user_data['messages_to_delete'].append(loading_message.message_id)
+    
+    # Obtenir la prédiction avec les cotes
+    prediction = predictor.predict_match(team1, team2, odds1, odds2)
+    
+    # Si la prédiction a échoué
+    if not prediction or "error" in prediction:
+        error_message = await loading_message.edit_text(
+            f"❌ Impossible de générer une prédiction:\n"
+            f"{prediction.get('error', 'Erreur inconnue')}"
+        )
+        context.user_data['messages_to_delete'].append(error_message.message_id)
+        return
+    
+    # Formater et envoyer la prédiction avec la présentation améliorée
+    prediction_text = format_improved_prediction_message(prediction)
+    result_message = await loading_message.edit_text(prediction_text, parse_mode='Markdown')
+    
+    # Stocker l'ID du message de résultat
+    context.user_data['current_result_message'] = result_message.message_id
+    
+    # Ajouter un bouton pour une nouvelle prédiction
+    keyboard = [
+        [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")],
+        [InlineKeyboardButton("🏠 Retour au menu", callback_data="back_to_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await result_message.edit_reply_markup(reply_markup=reply_markup)
+    
+    # Enregistrer la prédiction dans les logs
+    user = update.message.from_user
+    save_prediction_log(
+        user_id=user.id,
+        username=user.username,
+        team1=team1,
+        team2=team2,
+        odds1=odds1,
+        odds2=odds2,
+        prediction_result=prediction
+    )
+
+# Fonction pour nettoyer les anciens messages
+async def clean_old_messages(context):
+    """Supprime les anciens messages pour garder l'historique propre."""
+    if 'messages_to_delete' in context.user_data and context.user_data['messages_to_delete']:
+        for message_id in context.user_data['messages_to_delete']:
+            try:
+                await context.bot.delete_message(
+                    chat_id=context.user_data.get('chat_id'),
+                    message_id=message_id
+                )
+            except Exception as e:
+                logger.error(f"Erreur lors de la suppression du message {message_id}: {e}")
+        
+        # Vider la liste après suppression
+        context.user_data['messages_to_delete'] = []
+    
+    # Nettoyer aussi le message de résultat actuel s'il existe
+    if 'current_result_message' in context.user_data:
+        try:
+            await context.bot.delete_message(
+                chat_id=context.user_data.get('chat_id'),
+                message_id=context.user_data['current_result_message']
+            )
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression du message de résultat: {e}")
+
+# Format de prédiction amélioré avec séparateurs visuels
+def format_improved_prediction_message(prediction: Dict[str, Any]) -> str:
+    """Formate le résultat de prédiction avec une présentation améliorée et séparateurs visuels."""
+    if "error" in prediction:
+        return f"❌ Erreur: {prediction['error']}"
+    
+    teams = prediction["teams"]
+    team1 = teams["team1"]
+    team2 = teams["team2"]
+    
+    message = [
+        f"🔮 *PRÉDICTION: {team1} vs {team2}*",
+        f"📊 Niveau de confiance: *{prediction['confidence_level']}%*",
+        f"🤝 Confrontations directes: {prediction['direct_matches']}",
+        "\n─────────────────────────"
+    ]
+    
+    # Section 1: Scores exacts à la première mi-temps
+    message.append("\n*⏱️ SCORES PRÉVUS (1ÈRE MI-TEMPS):*")
+    if prediction["half_time_scores"]:
+        for i, score_data in enumerate(prediction["half_time_scores"], 1):
+            message.append(f"  *{i}.* {score_data['score']} ({score_data['confidence']}%)")
+    else:
+        message.append("  _Pas assez de données pour prédire le score à la mi-temps_")
+    
+    # Gagnant à la mi-temps
+    winner_ht = prediction["winner_half_time"]
+    if winner_ht["team"]:
+        if winner_ht["team"] == "Nul":
+            message.append(f"\n👉 *Mi-temps: Match nul probable* ({winner_ht['probability']}%)")
+        else:
+            message.append(f"\n👉 *Mi-temps: {winner_ht['team']} gagnant probable* ({winner_ht['probability']}%)")
+    
+    message.append("─────────────────────────")
+    
+    # Section 2: Scores exacts au temps réglementaire
+    message.append("\n*⚽ SCORES PRÉVUS (TEMPS RÉGLEMENTAIRE):*")
+    if prediction["full_time_scores"]:
+        for i, score_data in enumerate(prediction["full_time_scores"], 1):
+            message.append(f"  *{i}.* {score_data['score']} ({score_data['confidence']}%)")
+    else:
+        message.append("  _Pas assez de données pour prédire le score final_")
+    
+    # Gagnant du match
+    winner_ft = prediction["winner_full_time"]
+    if winner_ft["team"]:
+        if winner_ft["team"] == "Nul":
+            message.append(f"\n👉 *Résultat final: Match nul probable* ({winner_ft['probability']}%)")
+        else:
+            message.append(f"\n👉 *Résultat final: {winner_ft['team']} gagnant probable* ({winner_ft['probability']}%)")
+    
+    message.append("─────────────────────────")
+    
+    # Section 3: Statistiques moyennes
+    message.append("\n*📈 STATISTIQUES MOYENNES:*")
+    message.append(f"  • Buts 1ère mi-temps: *{prediction['avg_goals_half_time']}*")
+    message.append(f"  • Buts temps réglementaire: *{prediction['avg_goals_full_time']}*")
+    
+    # Section 4: Information sur les cotes si disponibles
+    odds = prediction["odds"]
+    if odds["team1"] and odds["team2"]:
+        message.append("\n─────────────────────────")
+        message.append("\n*💰 COTES:*")
+        message.append(f"  • {team1}: *{odds['team1']}*")
+        message.append(f"  • {team2}: *{odds['team2']}*")
+    
+    message.append("\n─────────────────────────")
+    message.append("\n_Cliquez sur 'Nouvelle prédiction' ci-dessous pour analyser un autre match._")
+    
+    return "\n".join(message)
+
+# Fonction pour réagir aux messages non reconnus comme commandes
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Répond aux messages qui ne sont pas des commandes."""
+    message_text = update.message.text.strip()
+    
+    # Stocker l'ID du chat pour la suppression de messages
+    context.user_data['chat_id'] = update.effective_chat.id
+    
+    # Rechercher si le message ressemble à une demande de prédiction
+    if " vs " in message_text or " contre " in message_text:
+        # Extraire les équipes
+        teams = re.split(r'\s+(?:vs|contre|VS|CONTRE)\s+', message_text)
+        
+        if len(teams) == 2 and teams[0] and teams[1]:
+            # Créer des boutons pour confirmer la prédiction
+            keyboard = [
+                [InlineKeyboardButton("✅ Prédire ce match", callback_data=f"predict_{teams[0]}_{teams[1]}")],
+                [InlineKeyboardButton("❌ Annuler", callback_data="cancel")]
+            ]
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            sent_message = await update.message.reply_text(
+                f"Souhaitez-vous obtenir une prédiction pour le match:\n\n"
+                f"*{teams[0]} vs {teams[1]}*?",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+            # Stocker l'ID du message pour le nettoyer plus tard
+            if 'messages_to_delete' not in context.user_data:
+                context.user_data['messages_to_delete'] = []
+            context.user_data['messages_to_delete'].append(sent_message.message_id)
+            return
+    
+    # Message par défaut si aucune action n'est déclenchée
+    sent_message = await update.message.reply_text(
+        "Je ne comprends pas cette commande. Utilisez /help pour voir les commandes disponibles."
+    )
+    
+    # Stocker l'ID du message pour le nettoyer plus tard
+    if 'messages_to_delete' not in context.user_data:
+        context.user_data['messages_to_delete'] = []
+    context.user_data['messages_to_delete'].append(sent_message.message_id)
+
+# Gestion des clics sur les boutons
+async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Gère les clics sur les boutons inline."""
     query = update.callback_query
     await query.answer()
     
-    # Récupérer les données utilisateur
-    user_id = query.from_user.id
-    context.user_data["user_id"] = user_id
-    context.user_data["username"] = query.from_user.username
+    # Stocker l'ID du chat pour la suppression de messages
+    context.user_data['chat_id'] = update.effective_chat.id
     
+    # Gestion du bouton "Nouvelle prédiction"
+    if query.data == "new_prediction":
+        # Vérifier l'abonnement de l'utilisateur
+        is_subscribed = await is_user_subscribed(context.bot, update.effective_user.id)
+        
+        if not is_subscribed:
+            keyboard = [
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+                [InlineKeyboardButton("🔄 Vérifier à nouveau", callback_data="verify_subscription")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            # Mettre à jour le message existant avec l'erreur d'abonnement
+            await query.edit_message_text(
+                "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
+                "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
+                reply_markup=reply_markup
+            )
+            return
+        
+        # Nettoyer les anciens messages
+        await clean_old_messages(context)
+        
+        # Afficher les équipes disponibles
+        teams_message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Pour obtenir une prédiction, utilisez:\n\n"
+                 "/predict Équipe1 vs Équipe2\n"
+                 "ou\n"
+                 "/odds Équipe1 vs Équipe2 cote1 cote2\n\n"
+                 "Exemple: /predict Manchester United vs Chelsea"
+        )
+        
+        # Stocker l'ID du message pour le nettoyer plus tard
+        if 'messages_to_delete' not in context.user_data:
+            context.user_data['messages_to_delete'] = []
+        context.user_data['messages_to_delete'].append(teams_message.message_id)
+        return
+    
+    # Vérification d'abonnement
     if query.data == "verify_subscription":
-        # Utiliser l'animation de vérification avec le contexte
-        await animated_subscription_check(query.message, user_id, context, edit=True)
-    
-    elif query.data == "start_prediction":
-        # Vérifier l'abonnement avant de lancer la prédiction
-        is_subscribed = await check_user_subscription(user_id)
+        is_subscribed = await is_user_subscribed(context.bot, update.effective_user.id)
         
-        if not is_subscribed:
-            # Message d'erreur si l'abonnement n'est plus actif
+        if is_subscribed:
+            # Si l'utilisateur est maintenant abonné
+            await query.edit_message_text(
+                "✅ Félicitations! Vous êtes bien abonné au canal @alvecapital1.\n\n"
+                "Vous pouvez maintenant utiliser toutes les fonctionnalités premium de FIFA 4x4 Predictor."
+            )
+            
+            # S'il y a une commande en attente, l'exécuter
+            if 'pending_command' in context.user_data and 'pending_text' in context.user_data:
+                command = context.user_data['pending_command']
+                text = context.user_data['pending_text']
+                
+                # Simuler l'envoi de la commande
+                if command == 'predict':
+                    # Créer un message avec le texte de la commande en attente
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=text
+                    )
+                    
+                    # Extraire les équipes du message
+                    message_text = text[9:].strip()
+                    teams = re.split(r'\s+(?:vs|contre|VS|CONTRE)\s+', message_text)
+                    
+                    if len(teams) == 2 and teams[0] and teams[1]:
+                        team1 = teams[0].strip()
+                        team2 = teams[1].strip()
+                        
+                        # Afficher un message de chargement
+                        loading_message = await context.bot.send_message(
+                            chat_id=update.effective_chat.id,
+                            text="⏳ Analyse en cours, veuillez patienter..."
+                        )
+                        
+                        # Obtenir la prédiction
+                        prediction = predictor.predict_match(team1, team2)
+                        
+                        # Formater et envoyer la prédiction
+                        prediction_text = format_improved_prediction_message(prediction)
+                        
+                        # Ajouter un bouton pour une nouvelle prédiction
+                        keyboard = [
+                            [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")],
+                            [InlineKeyboardButton("🏠 Retour au menu", callback_data="back_to_menu")]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        await loading_message.edit_text(prediction_text, parse_mode='Markdown', reply_markup=reply_markup)
+                
+                # Nettoyer les données de commande en attente
+                # Nettoyer les données de commande en attente
+                del context.user_data['pending_command']
+                del context.user_data['pending_text']
+        else:
+            # L'utilisateur n'est toujours pas abonné
             keyboard = [
                 [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
-                [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
+                [InlineKeyboardButton("🔄 Vérifier à nouveau", callback_data="verify_subscription")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est pas actif.\n"
-                "Vous devez être abonné pour utiliser cette fonctionnalité.",
-                reply_markup=reply_markup,
-                parse_mode='Markdown',
-                disable_web_page_preview=True
-            )
-            return
-        
-        # Lancer la sélection des équipes
-        await start_team_selection(query.message, context, edit=True)
-    
-    elif query.data.startswith("teams_page_"):
-        # Gestion de la pagination pour les équipes
-        page = int(query.data.split("_")[-1])
-        is_team1 = context.user_data.get("selecting_team1", True)
-        await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
-    
-    elif query.data.startswith("select_team1_"):
-        # Vérifier l'abonnement
-        is_subscribed = await check_user_subscription(user_id)
-        if not is_subscribed:
-            keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
-                [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est plus actif.\n"
-                "Vous devez être abonné pour continuer cette action.",
-                reply_markup=reply_markup,
-                parse_mode='Markdown',
-                disable_web_page_preview=True
-            )
-            return
-        
-        # Extraire le nom de l'équipe 1
-        team1 = query.data.replace("select_team1_", "")
-        context.user_data["team1"] = team1
-        context.user_data["selecting_team1"] = False
-        
-        # Animation de sélection
-        anim_frames = [
-            f"✅ *{team1}* sélectionné!",
-            f"✅ *{team1}* ✅",
-            f"🎯 *{team1}* sélectionné!"
-        ]
-        
-        for frame in anim_frames:
-            await query.edit_message_text(frame, parse_mode='Markdown')
-            await asyncio.sleep(0.3)
-        
-        # Puis passer à la sélection de l'équipe 2
-        await start_team2_selection(query.message, context, edit=True)
-    
-    elif query.data.startswith("select_team2_"):
-        # Vérifier l'abonnement
-        is_subscribed = await check_user_subscription(user_id)
-        if not is_subscribed:
-            keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
-                [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est plus actif.\n"
-                "Vous devez être abonné pour continuer cette action.",
-                reply_markup=reply_markup,
-                parse_mode='Markdown',
-                disable_web_page_preview=True
-            )
-            return
-        
-        # Extraire le nom de l'équipe 2
-        team2 = query.data.replace("select_team2_", "")
-        team1 = context.user_data.get("team1", "")
-        
-        if not team1:
-            await query.edit_message_text(
-                "❌ *Erreur de sélection*\n\n"
-                "Veuillez recommencer la procédure de sélection des équipes.",
-                parse_mode='Markdown'
-            )
-            return
-        
-        # Sauvegarder l'équipe 2
-        context.user_data["team2"] = team2
-        
-        # Animation de sélection
-        anim_frames = [
-            f"✅ *{team2}* sélectionné!",
-            f"✅ *{team2}* ✅",
-            f"🎯 *{team2}* sélectionné!"
-        ]
-        
-        for frame in anim_frames:
-            await query.edit_message_text(frame, parse_mode='Markdown')
-            await asyncio.sleep(0.3)
-        
-        # Demander la première cote
-        await query.edit_message_text(
-            f"💰 *Saisie des cotes (obligatoire)*\n\n"
-            f"Match: *{team1}* vs *{team2}*\n\n"
-            f"Veuillez saisir la cote pour *{team1}*\n\n"
-            f"_Exemple: 1.85_",
-            parse_mode='Markdown'
-        )
-        
-        # Passer en mode conversation pour recevoir les cotes
-        context.user_data["awaiting_odds_team1"] = True
-        context.user_data["odds_for_match"] = f"{team1} vs {team2}"
-        
-        return ODDS_INPUT_TEAM1
-    
-    elif query.data == "cancel":
-        # Annulation d'une action
-        await query.edit_message_text("❌ Opération annulée.")
-    
-    elif query.data == "new_prediction":
-        # Vérifier l'abonnement avant de lancer une nouvelle prédiction
-        is_subscribed = await check_user_subscription(user_id)
-        
-        if not is_subscribed:
-            # Message d'erreur si l'abonnement n'est plus actif
-            keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
-                [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est pas actif.\n"
-                "Vous devez être abonné pour utiliser cette fonctionnalité.",
-                reply_markup=reply_markup,
-                parse_mode='Markdown',
-                disable_web_page_preview=True
-            )
-            return
-        
-        # Message de transition
-        await query.edit_message_text(
-            "🔄 *Lancement d'une nouvelle prédiction...*",
-            parse_mode='Markdown'
-        )
-        
-        # Court délai et passage à la sélection d'équipe
-        context.user_data["selecting_team1"] = True
-        await asyncio.sleep(0.5)
-        await start_team_selection(query.message, context, edit=True)
-
-# Fonction pour démarrer la sélection des équipes (première équipe)
-async def start_team_selection(message, context, edit=False, page=0) -> None:
-    """Affiche la première page de sélection d'équipe."""
-    try:
-        context.user_data["selecting_team1"] = True
-        await show_teams_page(message, context, page, edit, is_team1=True)
-    except Exception as e:
-        logger.error(f"Erreur lors du démarrage de la sélection d'équipes: {e}")
-        if edit:
-            await message.edit_text(
-                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
-                parse_mode='Markdown'
-            )
-        else:
-            await message.reply_text(
-                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
-                parse_mode='Markdown'
-            )
-
-# Fonction pour afficher une page d'équipes
-async def show_teams_page(message, context, page=0, edit=False, is_team1=True) -> None:
-    """Affiche une page de la liste des équipes."""
-    teams = get_all_teams()
-    
-    # Calculer le nombre total de pages
-    total_pages = (len(teams) + TEAMS_PER_PAGE - 1) // TEAMS_PER_PAGE
-    
-    # S'assurer que la page est valide
-    page = max(0, min(page, total_pages - 1))
-    
-    # Obtenir les équipes pour cette page
-    start_idx = page * TEAMS_PER_PAGE
-    end_idx = min(start_idx + TEAMS_PER_PAGE, len(teams))
-    page_teams = teams[start_idx:end_idx]
-    
-    # Créer les boutons pour les équipes
-    team_buttons = []
-    row = []
-    
-    callback_prefix = "select_team1_" if is_team1 else "select_team2_"
-    
-    for i, team in enumerate(page_teams):
-        row.append(InlineKeyboardButton(team, callback_data=f"{callback_prefix}{team}"))
-        if len(row) == 2 or i == len(page_teams) - 1:
-            team_buttons.append(row)
-            row = []
-    
-    # Ajouter les boutons de navigation
-    nav_buttons = []
-    
-    if page > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️ Précédent", callback_data=f"teams_page_{page-1}"))
-    
-    if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton("Suivant ▶️", callback_data=f"teams_page_{page+1}"))
-    
-    if nav_buttons:
-        team_buttons.append(nav_buttons)
-    
-    # Ajouter bouton pour revenir en arrière si nécessaire
-    if not is_team1:
-        team_buttons.append([InlineKeyboardButton("◀️ Retour", callback_data="start_prediction")])
-    
-    reply_markup = InlineKeyboardMarkup(team_buttons)
-    
-    # Texte du message
-    team_type = "première" if is_team1 else "deuxième"
-    text = (
-        f"🏆 *Sélection des équipes* (Page {page+1}/{total_pages})\n\n"
-        f"Veuillez sélectionner la *{team_type} équipe* pour votre prédiction:"
-    )
-    
-    try:
-        if edit:
-            await message.edit_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-        else:
-            await message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-    except Exception as e:
-        logger.error(f"Erreur lors de l'affichage des équipes: {e}")
-        if edit:
-            await message.edit_text(
-                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
-                parse_mode='Markdown'
-            )
-        else:
-            await message.reply_text(
-                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
-                parse_mode='Markdown'
-            )
-
-# Fonction pour démarrer la sélection de la deuxième équipe
-async def start_team2_selection(message, context, edit=False, page=0) -> None:
-    """Affiche les options de sélection pour la deuxième équipe."""
-    team1 = context.user_data.get("team1", "")
-    
-    if not team1:
-        if edit:
-            await message.edit_text(
-                "❌ *Erreur*\n\nVeuillez d'abord sélectionner la première équipe.",
-                parse_mode='Markdown'
-            )
-        else:
-            await message.reply_text(
-                "❌ *Erreur*\n\nVeuillez d'abord sélectionner la première équipe.",
-                parse_mode='Markdown'
+                "❌ Vous n'êtes toujours pas abonné au canal @alvecapital1.\n\n"
+                "L'abonnement est requis pour accéder aux fonctionnalités premium de FIFA 4x4 Predictor.",
+                reply_markup=reply_markup
             )
         return
     
-    # Afficher la page de sélection de la deuxième équipe
-    await show_teams_page(message, context, page, edit, is_team1=False)
-
-# Gestionnaire pour la saisie de la cote de l'équipe 1
-async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Gère la saisie de la cote pour la première équipe."""
-    if not context.user_data.get("awaiting_odds_team1", False):
-        return ConversationHandler.END
-    
-    # Vérifier l'abonnement
-    user_id = update.effective_user.id
-    is_subscribed = await check_user_subscription(user_id)
-    
-    if not is_subscribed:
-        await send_subscription_required(update.message)
-        return ConversationHandler.END
-    
-    user_input = update.message.text.strip()
-    team1 = context.user_data.get("team1", "")
-    team2 = context.user_data.get("team2", "")
-    
-    # Extraire la cote
-    try:
-        odds1 = float(user_input.replace(",", "."))
+    # Retour au menu principal
+    if query.data == "back_to_menu":
+        await clean_old_messages(context)
         
-        # Vérifier que la cote est valide
-        if odds1 < 1.01:
-            await update.message.reply_text(
-                "❌ *Valeur de cote invalide*\n\n"
-                "La cote doit être supérieure à 1.01.",
-                parse_mode='Markdown'
-            )
-            return ODDS_INPUT_TEAM1
-        
-        # Sauvegarder la cote
-        context.user_data["odds1"] = odds1
-        context.user_data["awaiting_odds_team1"] = False
-        
-        # Animation de validation de la cote
-        loading_message = await update.message.reply_text(
-            f"✅ Cote de *{team1}* enregistrée: *{odds1}*",
-            parse_mode='Markdown'
+        menu_message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Bienvenue sur FIFA 4x4 Predictor! Que souhaitez-vous faire?\n\n"
+                 "/predict - Obtenir une prédiction de match\n"
+                 "/odds - Prédiction avec cotes\n"
+                 "/teams - Voir les équipes disponibles\n"
+                 "/help - Aide détaillée"
         )
-        
-        # Demander la cote de l'équipe 2
-        await asyncio.sleep(1)
-        await loading_message.edit_text(
-            f"💰 *Saisie des cotes (obligatoire)*\n\n"
-            f"Match: *{team1}* vs *{team2}*\n\n"
-            f"Veuillez maintenant saisir la cote pour *{team2}*\n\n"
-            f"_Exemple: 2.35_",
-            parse_mode='Markdown'
-        )
-        
-        # Passer à l'attente de la cote de l'équipe 2
-        context.user_data["awaiting_odds_team2"] = True
-        
-        return ODDS_INPUT_TEAM2
-    except ValueError:
-        await update.message.reply_text(
-            "❌ *Format incorrect*\n\n"
-            f"Veuillez saisir uniquement la valeur numérique de la cote pour *{team1}*.\n\n"
-            "Exemple: `1.85`",
-            parse_mode='Markdown'
-        )
-        return ODDS_INPUT_TEAM1
-
-# Gestionnaire pour la saisie de la cote de l'équipe 2
-async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Gère la saisie de la cote pour la deuxième équipe."""
-    if not context.user_data.get("awaiting_odds_team2", False):
-        return ConversationHandler.END
+        return
     
-    # Vérifier l'abonnement
-    # Vérifier l'abonnement
-    user_id = update.effective_user.id
-    is_subscribed = await check_user_subscription(user_id)
+    # Annulation
+    if query.data == "cancel":
+        await query.edit_message_text("Opération annulée.")
+        return
     
-    if not is_subscribed:
-        await send_subscription_required(update.message)
-        return ConversationHandler.END
-    
-    user_input = update.message.text.strip()
-    team1 = context.user_data.get("team1", "")
-    team2 = context.user_data.get("team2", "")
-    odds1 = context.user_data.get("odds1", 0)
-    
-    # Extraire la cote
-    try:
-        odds2 = float(user_input.replace(",", "."))
+    # Prédiction à partir d'un bouton
+    if query.data.startswith("predict_"):
+        # Vérifier l'abonnement de l'utilisateur
+        is_subscribed = await is_user_subscribed(context.bot, update.effective_user.id)
         
-        # Vérifier que la cote est valide
-        if odds2 < 1.01:
-            await update.message.reply_text(
-                "❌ *Valeur de cote invalide*\n\n"
-                "La cote doit être supérieure à 1.01.",
-                parse_mode='Markdown'
-            )
-            return ODDS_INPUT_TEAM2
-        
-        # Sauvegarder la cote
-        context.user_data["odds2"] = odds2
-        context.user_data["awaiting_odds_team2"] = False
-        
-        # Animation de validation de la cote
-        loading_message = await update.message.reply_text(
-            f"✅ Cote de *{team2}* enregistrée: *{odds2}*",
-            parse_mode='Markdown'
-        )
-        
-        # Animation de génération de prédiction
-        await asyncio.sleep(0.5)
-        await loading_message.edit_text(
-            "🧠 *Analyse des données en cours...*",
-            parse_mode='Markdown'
-        )
-        
-        # Animation stylisée pour l'analyse
-        analysis_frames = [
-            "📊 *Analyse des performances historiques...*",
-            "🏆 *Analyse des confrontations directes...*",
-            "⚽ *Calcul des probabilités de scores...*",
-            "📈 *Finalisation des prédictions...*"
-        ]
-        
-        for frame in analysis_frames:
-            await asyncio.sleep(0.7)
-            await loading_message.edit_text(frame, parse_mode='Markdown')
-        
-        # Génération de la prédiction
-        try:
-            prediction = predictor.predict_match(team1, team2, odds1, odds2)
+        if not is_subscribed:
+            keyboard = [
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+                [InlineKeyboardButton("🔄 Vérifier à nouveau", callback_data="verify_subscription")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             
+            await query.edit_message_text(
+                "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
+                "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
+                reply_markup=reply_markup
+            )
+            return
+        
+        # Extraire les équipes du callback_data
+        data_parts = query.data.split("_")
+        if len(data_parts) >= 3:
+            team1 = data_parts[1]
+            team2 = "_".join(data_parts[2:])  # Gérer les noms d'équipe avec des underscores
+            
+            # Afficher un message de chargement
+            await query.edit_message_text("⏳ Analyse en cours, veuillez patienter...")
+            
+            # Obtenir la prédiction
+            prediction = predictor.predict_match(team1, team2)
+            
+            # Si la prédiction a échoué
             if not prediction or "error" in prediction:
-                error_msg = prediction.get("error", "Erreur inconnue") if prediction else "Impossible de générer une prédiction"
-                
-                # Proposer de réessayer
-                keyboard = [
-                    [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                
-                await loading_message.edit_text(
-                    f"❌ *Erreur de prédiction*\n\n"
-                    f"{error_msg}\n\n"
-                    f"Veuillez essayer avec d'autres équipes.",
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
+                await query.edit_message_text(
+                    f"❌ Impossible de générer une prédiction:\n"
+                    f"{prediction.get('error', 'Erreur inconnue')}"
                 )
-                return ConversationHandler.END
+                return
             
             # Formater et envoyer la prédiction
-            prediction_text = format_prediction_message(prediction)
+            prediction_text = format_improved_prediction_message(prediction)
             
-            # Animation finale avant d'afficher le résultat
-            final_frames = [
-                "🎯 *Prédiction prête!*",
-                "✨ *Affichage des résultats...*"
-            ]
-            
-            for frame in final_frames:
-                await asyncio.sleep(0.5)
-                await loading_message.edit_text(frame, parse_mode='Markdown')
-            
-            # Proposer une nouvelle prédiction
+            # Ajouter un bouton pour une nouvelle prédiction
             keyboard = [
-                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
+                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")],
+                [InlineKeyboardButton("🏠 Retour au menu", callback_data="back_to_menu")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await loading_message.edit_text(
-                prediction_text,
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
+            await query.edit_message_text(prediction_text, parse_mode='Markdown', reply_markup=reply_markup)
             
             # Enregistrer la prédiction dans les logs
-            user_id = context.user_data.get("user_id", update.message.from_user.id)
-            username = context.user_data.get("username", update.message.from_user.username)
-            
+            user = update.effective_user
             save_prediction_log(
-                user_id=user_id,
-                username=username,
+                user_id=user.id,
+                username=user.username,
                 team1=team1,
                 team2=team2,
-                odds1=odds1,
-                odds2=odds2,
                 prediction_result=prediction
             )
-            
-            return ConversationHandler.END
-        except Exception as e:
-            logger.error(f"Erreur lors de la génération de la prédiction: {e}")
-            
-            # Proposer de réessayer en cas d'erreur
-            keyboard = [
-                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="new_prediction")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await loading_message.edit_text(
-                "❌ *Une erreur s'est produite lors de la génération de la prédiction*\n\n"
-                "Veuillez réessayer avec d'autres équipes ou contacter l'administrateur.",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
-            return ConversationHandler.END
-    except ValueError:
-        await update.message.reply_text(
-            "❌ *Format incorrect*\n\n"
-            f"Veuillez saisir uniquement la valeur numérique de la cote pour *{team2}*.\n\n"
-            "Exemple: `2.35`",
-            parse_mode='Markdown'
-        )
-        return ODDS_INPUT_TEAM2
 
 # Fonction pour lister les équipes disponibles
 async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Affiche la liste des équipes disponibles dans la base de données."""
-    # Vérifier l'abonnement avant de traiter
-    user_id = update.effective_user.id
-    is_subscribed = await check_user_subscription(user_id)
+    # Vérifier l'abonnement de l'utilisateur
+    is_subscribed = await is_user_subscribed(context.bot, update.effective_user.id)
     
     if not is_subscribed:
-        await send_subscription_required(update.message)
+        keyboard = [
+            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+            [InlineKeyboardButton("🔄 Vérifier à nouveau", callback_data="verify_subscription")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
+            "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
+            reply_markup=reply_markup
+        )
         return
+    
+    # Supprimer les anciens messages si nécessaire
+    await clean_old_messages(context)
     
     # Récupérer la liste des équipes
     teams = get_all_teams()
     
     if not teams:
-        await update.message.reply_text("Aucune équipe n'a été trouvée dans la base de données.")
+        sent_message = await update.message.reply_text("Aucune équipe n'a été trouvée dans la base de données.")
+        
+        # Stocker l'ID du message pour le nettoyer plus tard
+        if 'messages_to_delete' not in context.user_data:
+            context.user_data['messages_to_delete'] = []
+        context.user_data['messages_to_delete'].append(sent_message.message_id)
         return
     
     # Formater la liste des équipes
@@ -786,55 +727,59 @@ async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             teams_text += f"• {team}\n"
         teams_text += "\n"
     
+    # Ajouter un bouton pour effectuer une prédiction
+    keyboard = [
+        [InlineKeyboardButton("🔮 Faire une prédiction", callback_data="new_prediction")],
+        [InlineKeyboardButton("🏠 Retour au menu", callback_data="back_to_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     # Si le message est trop long, diviser en plusieurs messages
     if len(teams_text) > 4000:
         chunks = [teams_text[i:i+4000] for i in range(0, len(teams_text), 4000)]
-        for chunk in chunks:
-            await update.message.reply_text(chunk, parse_mode='Markdown')
+        for i, chunk in enumerate(chunks):
+            if i == len(chunks) - 1:  # Dernier message
+                sent_message = await update.message.reply_text(chunk, parse_mode='Markdown', reply_markup=reply_markup)
+            else:
+                sent_message = await update.message.reply_text(chunk, parse_mode='Markdown')
+            
+            # Stocker l'ID du message pour le nettoyer plus tard
+            if 'messages_to_delete' not in context.user_data:
+                context.user_data['messages_to_delete'] = []
+            context.user_data['messages_to_delete'].append(sent_message.message_id)
     else:
-        await update.message.reply_text(teams_text, parse_mode='Markdown')
-
-# Gérer les messages directs
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
-    """Répond aux messages qui ne sont pas des commandes."""
-    # Si l'utilisateur attend des cotes pour une équipe
-    if context.user_data.get("awaiting_odds_team1", False):
-        return await handle_odds_team1_input(update, context)
-    
-    if context.user_data.get("awaiting_odds_team2", False):
-        return await handle_odds_team2_input(update, context)
-    
-    # Vérifier l'abonnement avant de traiter
-    user_id = update.effective_user.id
-    is_subscribed = await check_user_subscription(user_id)
-    
-    if not is_subscribed:
-        await send_subscription_required(update.message)
-        return
-    
-    message_text = update.message.text.strip()
-    
-    # Rechercher si le message ressemble à une demande de prédiction
-    if " vs " in message_text or " contre " in message_text:
-        # Informer l'utilisateur d'utiliser la méthode interactive
-        keyboard = [
-            [InlineKeyboardButton("🔮 Faire une prédiction", callback_data="start_prediction")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        sent_message = await update.message.reply_text(teams_text, parse_mode='Markdown', reply_markup=reply_markup)
         
-        await update.message.reply_text(
-            "ℹ️ *Nouvelle méthode de prédiction*\n\n"
-            "Pour une expérience améliorée, veuillez utiliser notre système interactif de prédiction.\n\n"
-            "Cliquez sur le bouton ci-dessous pour commencer une prédiction guidée avec sélection d'équipes et cotes obligatoires.",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-        return
-    
-    # Message par défaut si aucune action n'est déclenchée
-    await update.message.reply_text(
-        "Je ne comprends pas cette commande. Utilisez /help pour voir les commandes disponibles."
-    )
+        # Stocker l'ID du message pour le nettoyer plus tard
+        if 'messages_to_delete' not in context.user_data:
+            context.user_data['messages_to_delete'] = []
+        context.user_data['messages_to_delete'].append(sent_message.message_id)
+
+async def setup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Affiche les informations pour mettre en place le bot."""
+    setup_text = """
+🔧 *Configuration du bot FIFA 4x4 Predictor*
+
+Ce bot utilise une base de données de matchs FIFA 4x4 pour générer des prédictions précises.
+
+*Fichiers nécessaires:*
+- `google_credentials.json` - Pour accéder à votre Google Sheets
+- `config.py` - Configuration du bot avec les tokens et paramètres
+
+*Installation:*
+1. Assurez-vous que Python 3.7+ est installé
+2. Installez les dépendances: `pip install -r requirements.txt`
+3. Lancez le bot: `python fifa_bot.py`
+
+*Hébergement:*
+Pour un fonctionnement continu, hébergez sur un serveur comme:
+- Heroku
+- PythonAnywhere
+- VPS personnel
+
+*Pour plus d'informations, contactez l'administrateur du bot.*
+"""
+    await update.message.reply_text(setup_text, parse_mode='Markdown')
 
 # Fonction principale
 def main() -> None:
@@ -847,24 +792,16 @@ def main() -> None:
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("predict", predict_command))
+        application.add_handler(CommandHandler("odds", odds_command))
         application.add_handler(CommandHandler("teams", teams_command))
+        application.add_handler(CommandHandler("setup", setup_command))
+        application.add_handler(CommandHandler("webapp", webapp_command))
         application.add_handler(CommandHandler("check", check_subscription_command))
         
-        # Gestionnaire de conversation pour les cotes
-        conv_handler = ConversationHandler(
-            entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)],
-            states={
-                ODDS_INPUT_TEAM1: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_odds_team1_input)],
-                ODDS_INPUT_TEAM2: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_odds_team2_input)]
-            },
-            fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
-        )
-        application.add_handler(conv_handler)
-        
         # Ajouter le gestionnaire pour les clics sur les boutons
-        application.add_handler(CallbackQueryHandler(button_callback))
+        application.add_handler(CallbackQueryHandler(button_click))
         
-        # Ajouter le gestionnaire pour les messages normaux (après le ConversationHandler)
+        # Ajouter le gestionnaire pour les messages normaux
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         
         # Ajouter le gestionnaire d'erreurs

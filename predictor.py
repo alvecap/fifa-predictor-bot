@@ -409,7 +409,10 @@ class MatchPredictor:
         return prediction_results
 
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
-    """Formate le résultat de prédiction en message lisible"""
+    """Formate le résultat de prédiction en message lisible et attrayant"""
+    if not prediction:
+        return "❌ Erreur: Impossible de générer une prédiction"
+        
     if "error" in prediction:
         return f"❌ Erreur: {prediction['error']}"
     
@@ -418,80 +421,78 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     team2 = teams["team2"]
     
     message = [
-        f"🔮 *PRÉDICTION: {team1} vs {team2}*",
-        f"📊 Niveau de confiance: {prediction['confidence_level']}%",
+        f"🔮 *PRÉDICTION:* {team1} vs {team2}",
         f"🤝 Confrontations directes: {prediction['direct_matches']}",
         "\n"
     ]
     
-    # Section 1: Scores exacts à la première mi-temps
-    message.append("*⏱️ SCORES PRÉVUS (1ÈRE MI-TEMPS):*")
-    if prediction["half_time_scores"]:
-        for i, score_data in enumerate(prediction["half_time_scores"], 1):
-            message.append(f"  {i}. {score_data['score']} ({score_data['confidence']}%)")
-    else:
-        message.append("  Pas assez de données pour prédire le score à la mi-temps")
+    # Section 1: Scores exacts simplifiés - Mi-temps
+    message.append("*⏱️ MI-TEMPS:*")
     
-    # Gagnant à la mi-temps
+    # Scores alignés côte à côte avec des espaces entre eux
+    half_time_scores = []
+    if prediction["half_time_scores"] and len(prediction["half_time_scores"]) > 0:
+        for i in range(min(3, len(prediction["half_time_scores"]))):
+            half_time_scores.append(prediction["half_time_scores"][i]["score"])
+        
+        message.append(f"  *{half_time_scores[0]}*    {half_time_scores[1] if len(half_time_scores) > 1 else ''}    {half_time_scores[2] if len(half_time_scores) > 2 else ''}")
+    else:
+        message.append("  Pas assez de données pour prédire")
+    
+    # Gagnant à la mi-temps - version simplifiée
     winner_ht = prediction["winner_half_time"]
     if winner_ht["team"]:
         if winner_ht["team"] == "Nul":
-            message.append(f"  👉 Mi-temps: Match nul probable ({winner_ht['probability']}%)")
+            message.append(f"  👉 *Match nul*")
         else:
-            message.append(f"  👉 Mi-temps: {winner_ht['team']} gagnant probable ({winner_ht['probability']}%)")
+            message.append(f"  👉 *{winner_ht['team']}* gagnant")
     message.append("")
     
-    # Section 2: Scores exacts au temps réglementaire
-    message.append("*⚽ SCORES PRÉVUS (TEMPS RÉGLEMENTAIRE):*")
-    if prediction["full_time_scores"]:
-        for i, score_data in enumerate(prediction["full_time_scores"], 1):
-            message.append(f"  {i}. {score_data['score']} ({score_data['confidence']}%)")
-    else:
-        message.append("  Pas assez de données pour prédire le score final")
+    # Section 2: Scores exacts simplifiés - Temps réglementaire
+    message.append("*⚽ TEMPS RÉGLEMENTAIRE:*")
     
-    # Gagnant du match
+    # Scores alignés côte à côte
+    full_time_scores = []
+    if prediction["full_time_scores"] and len(prediction["full_time_scores"]) > 0:
+        for i in range(min(3, len(prediction["full_time_scores"]))):
+            full_time_scores.append(prediction["full_time_scores"][i]["score"])
+        
+        message.append(f"  *{full_time_scores[0]}*    {full_time_scores[1] if len(full_time_scores) > 1 else ''}    {full_time_scores[2] if len(full_time_scores) > 2 else ''}")
+    else:
+        message.append("  Pas assez de données pour prédire")
+    
+    # Gagnant du match - version simplifiée
     winner_ft = prediction["winner_full_time"]
     if winner_ft["team"]:
         if winner_ft["team"] == "Nul":
-            message.append(f"  👉 Résultat final: Match nul probable ({winner_ft['probability']}%)")
+            message.append(f"  👉 *Match nul*")
         else:
-            message.append(f"  👉 Résultat final: {winner_ft['team']} gagnant probable ({winner_ft['probability']}%)")
+            message.append(f"  👉 *{winner_ft['team']}* gagnant")
     message.append("")
     
-    # Section 3: Modifier "Statistiques moyennes" par "Prédiction recommandée" et format paris sportif
+    # Section 3: Prédictions recommandées au format paris sportif
     message.append("*📈 PRÉDICTIONS RECOMMANDÉES:*")
     
     # Format paris sportif pour les buts en 1ère mi-temps
     avg_ht_goals = prediction['avg_goals_half_time']
-    half_time_line = round(avg_ht_goals * 2) / 2  # Arrondir à 0.5 près
-    half_time_over = half_time_line + 0.5
-    half_time_under = half_time_line - 0.5
+    # Choisir une ligne plus élevée pour les prédictions
+    half_time_line = max(1.5, round(avg_ht_goals + 1))
+    # Déterminer si c'est plutôt un over ou under
+    half_time_over_under = "+" if avg_ht_goals > half_time_line else "-"
     
     # Pour le temps réglementaire
     avg_ft_goals = prediction['avg_goals_full_time']
-    full_time_line = round(avg_ft_goals * 2) / 2  # Arrondir à 0.5 près
-    full_time_over = full_time_line + 0.5
-    full_time_under = full_time_line - 0.5
+    # Choisir une ligne plus élevée pour les prédictions
+    full_time_line = max(2.5, round(avg_ft_goals + 1))
+    # Déterminer si c'est plutôt un over ou under
+    full_time_over_under = "+" if avg_ft_goals > full_time_line else "-"
     
-    # Probabilité pour over/under
-    over_prob_ht = 60 if half_time_line < 2 else 45
-    under_prob_ht = 100 - over_prob_ht
+    # Afficher les options de paris sous forme de recommandation unique
+    message.append(f"  • *Mi-temps:* {half_time_over_under}{half_time_line} buts")
+    message.append(f"  • *Temps réglementaire:* {full_time_over_under}{full_time_line} buts")
+    message.append("")
     
-    over_prob_ft = 55 if full_time_line < 3 else 45
-    under_prob_ft = 100 - over_prob_ft
-    
-    # Afficher les options de paris
-    message.append(f"  • *Mi-temps:* {half_time_under} buts ou moins ({under_prob_ht}%)")
-    message.append(f"  • *Mi-temps:* {half_time_over} buts ou plus ({over_prob_ht}%)")
-    message.append(f"  • *Temps réglementaire:* {full_time_under} buts ou moins ({under_prob_ft}%)")
-    message.append(f"  • *Temps réglementaire:* {full_time_over} buts ou plus ({over_prob_ft}%)")
-    
-    # Section 4: Information sur les cotes si disponibles
-    odds = prediction["odds"]
-    if odds["team1"] and odds["team2"]:
-        message.append("")
-        message.append("*💰 COTES:*")
-        message.append(f"  • {team1}: {odds['team1']}")
-        message.append(f"  • {team2}: {odds['team2']}")
+    # Message de prévention sur les paris sportifs
+    message.append("_Les paris sportifs comportent des risques. Ne misez pas plus de 5% de votre capital._")
     
     return "\n".join(message)

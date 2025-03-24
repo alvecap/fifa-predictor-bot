@@ -410,9 +410,6 @@ class MatchPredictor:
 
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
     """Formate le résultat de prédiction en message lisible"""
-    if not prediction:
-        return "❌ Erreur: Impossible de générer une prédiction"
-        
     if "error" in prediction:
         return f"❌ Erreur: {prediction['error']}"
     
@@ -461,14 +458,37 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
             message.append(f"  👉 Résultat final: {winner_ft['team']} gagnant probable ({winner_ft['probability']}%)")
     message.append("")
     
-    # Section 3: Statistiques moyennes
-    message.append("*📈 STATISTIQUES MOYENNES:*")
-    message.append(f"  • Buts 1ère mi-temps: {prediction['avg_goals_half_time']}")
-    message.append(f"  • Buts temps réglementaire: {prediction['avg_goals_full_time']}")
+    # Section 3: Modifier "Statistiques moyennes" par "Prédiction recommandée" et format paris sportif
+    message.append("*📈 PRÉDICTIONS RECOMMANDÉES:*")
+    
+    # Format paris sportif pour les buts en 1ère mi-temps
+    avg_ht_goals = prediction['avg_goals_half_time']
+    half_time_line = round(avg_ht_goals * 2) / 2  # Arrondir à 0.5 près
+    half_time_over = half_time_line + 0.5
+    half_time_under = half_time_line - 0.5
+    
+    # Pour le temps réglementaire
+    avg_ft_goals = prediction['avg_goals_full_time']
+    full_time_line = round(avg_ft_goals * 2) / 2  # Arrondir à 0.5 près
+    full_time_over = full_time_line + 0.5
+    full_time_under = full_time_line - 0.5
+    
+    # Probabilité pour over/under
+    over_prob_ht = 60 if half_time_line < 2 else 45
+    under_prob_ht = 100 - over_prob_ht
+    
+    over_prob_ft = 55 if full_time_line < 3 else 45
+    under_prob_ft = 100 - over_prob_ft
+    
+    # Afficher les options de paris
+    message.append(f"  • *Mi-temps:* {half_time_under} buts ou moins ({under_prob_ht}%)")
+    message.append(f"  • *Mi-temps:* {half_time_over} buts ou plus ({over_prob_ht}%)")
+    message.append(f"  • *Temps réglementaire:* {full_time_under} buts ou moins ({under_prob_ft}%)")
+    message.append(f"  • *Temps réglementaire:* {full_time_over} buts ou plus ({over_prob_ft}%)")
     
     # Section 4: Information sur les cotes si disponibles
     odds = prediction["odds"]
-    if odds["team1"] is not None and odds["team2"] is not None:
+    if odds["team1"] and odds["team2"]:
         message.append("")
         message.append("*💰 COTES:*")
         message.append(f"  • {team1}: {odds['team1']}")

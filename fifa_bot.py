@@ -401,14 +401,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             # Message d'erreur si l'abonnement n'est plus actif
             keyboard = [
                 [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
-                [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
+                [InlineKeyboardButton("🔍 Vérifier à nouveau", callback_data="verify_subscription")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est pas actif.\n"
-                "Vous devez être abonné pour utiliser cette fonctionnalité.",
+                "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
+                "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
                 reply_markup=reply_markup,
                 parse_mode='Markdown',
                 disable_web_page_preview=True
@@ -621,6 +620,7 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
     team2 = context.user_data.get("team2", "")
     odds1 = context.user_data.get("odds1", 0)
     
+    # Extraire la cote
     # Extraire la cote
     try:
         odds2 = float(user_input.replace(",", "."))

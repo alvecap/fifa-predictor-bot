@@ -262,46 +262,36 @@ def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None,
         logger.error(f"Erreur lors de l'enregistrement du log: {e}")
         return False
 
-def check_user_subscription(user_id, channel_id="@alvecapital1"):
+async def check_user_subscription(user_id):
     """
-    Vérifie si un utilisateur est abonné à un canal spécifique dans la base de données.
+    Vérifie si un utilisateur est abonné au canal @alvecapitalofficiel.
     
     Args:
-        user_id (int): ID de l'utilisateur Telegram
-        channel_id (str): ID du canal à vérifier (par défaut "@alvecapital1")
+        user_id (int): L'ID de l'utilisateur Telegram à vérifier
         
     Returns:
         bool: True si l'utilisateur est abonné, False sinon
     """
     try:
-        # Connexion à Google Sheets
-        spreadsheet = connect_to_sheets()
+        from telegram import Bot
+        from telegram.error import TelegramError
+        from config import TELEGRAM_TOKEN
         
-        # Récupérer ou créer la feuille des abonnements
-        try:
-            subscriptions_sheet = spreadsheet.worksheet("Abonnements")
-        except gspread.exceptions.WorksheetNotFound:
-            # Si la feuille n'existe pas, on la crée
-            subscriptions_sheet = spreadsheet.add_worksheet(title="Abonnements", rows=1000, cols=5)
-            # Ajouter les en-têtes
-            subscriptions_sheet.update('A1:E1', [['User ID', 'Username', 'Channel ID', 'Date d\'abonnement', 'Statut']])
+        bot = Bot(token=TELEGRAM_TOKEN)
         
-        # Rechercher l'utilisateur dans la feuille
-        try:
-            # Rechercher par ID utilisateur
-            cell = subscriptions_sheet.find(str(user_id))
-            if cell:
-                # Récupérer la ligne complète
-                row = subscriptions_sheet.row_values(cell.row)
-                # Vérifier le canal et le statut
-                if len(row) >= 5 and row[2] == channel_id and row[4] == "Actif":
-                    return True
-        except gspread.exceptions.CellNotFound:
-            # L'utilisateur n'est pas trouvé
-            pass
+        # Identifiant du canal @alvecapitalofficiel
+        channel_id = "@alvecapitalofficiel"
         
+        # Vérifier si l'utilisateur est membre du canal
+        chat_member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+        
+        # Les statuts qui indiquent une adhésion active au canal
+        valid_statuses = ['creator', 'administrator', 'member']
+        
+        return chat_member.status in valid_statuses
+    
+    except TelegramError as e:
+        # En cas d'erreur, logger l'erreur et considérer que l'utilisateur n'est pas abonné
+        import logging
+        logging.error(f"Erreur lors de la vérification de l'abonnement: {e}")
         return False
-    except Exception as e:
-        logger.error(f"Erreur lors de la vérification d'abonnement: {e}")
-        # En cas d'erreur, on retourne True par défaut pour éviter de bloquer l'utilisateur
-        return True

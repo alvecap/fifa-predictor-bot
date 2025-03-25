@@ -244,7 +244,7 @@ async def animated_subscription_check(message, user_id, context=None, edit=False
         
         # Message d'erreur
         keyboard = [
-            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
             [InlineKeyboardButton("🔍 Vérifier à nouveau", callback_data="verify_subscription")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -266,7 +266,7 @@ async def animated_subscription_check(message, user_id, context=None, edit=False
 async def send_subscription_required(message) -> None:
     """Envoie un message indiquant que l'abonnement est nécessaire."""
     keyboard = [
-        [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+        [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
         [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -433,14 +433,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not is_subscribed:
             # Message d'erreur si l'abonnement n'est plus actif
             keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
                 [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
                 "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est pas actif.\n"
+                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est pas actif.\n"
                 "Vous devez être abonné pour utiliser cette fonctionnalité.",
                 reply_markup=reply_markup,
                 parse_mode='Markdown',
@@ -481,14 +481,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         is_subscribed = await check_user_subscription(user_id)
         if not is_subscribed:
             keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
                 [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
                 "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est plus actif.\n"
+                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est plus actif.\n"
                 "Vous devez être abonné pour continuer cette action.",
                 reply_markup=reply_markup,
                 parse_mode='Markdown',
@@ -537,14 +537,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         is_subscribed = await check_user_subscription(user_id)
         if not is_subscribed:
             keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
                 [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
                 "⚠️ *Abonnement requis*\n\n"
-                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapital1) n'est plus actif.\n"
+                "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est plus actif.\n"
                 "Vous devez être abonné pour continuer cette action.",
                 reply_markup=reply_markup,
                 parse_mode='Markdown',
@@ -596,6 +596,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await asyncio.sleep(0.3)
         
         # Demander la première cote
+        # Demander la première cote
         await query.edit_message_text(
             f"💰 *Saisie des cotes (obligatoire)*\n\n"
             f"Match: *{team1}* vs *{team2}*\n\n"
@@ -621,7 +622,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not is_subscribed:
             # Message d'erreur si l'abonnement n'est plus actif
             keyboard = [
-                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapital1")],
+                [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
                 [InlineKeyboardButton("🔍 Vérifier à nouveau", callback_data="verify_subscription")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)

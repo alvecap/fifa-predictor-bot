@@ -66,7 +66,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     welcome_text += "🏆 Je vous aide à *prédire les résultats* de matchs de football FIFA 4x4 "
     welcome_text += "en me basant sur des *données historiques* précises.\n\n"
     welcome_text += "⚠️ Pour utiliser toutes les fonctionnalités, vous devez être abonné "
-    welcome_text += f"à notre canal [AL VE CAPITAL](https://t.me/alvecapital1)."
+    welcome_text += f"à notre canal [AL VE CAPITAL](https://t.me/alvecapitalofficiel)."
     
     # Vérifier si l'utilisateur a complété son quota de parrainages
     has_completed = await has_completed_referrals(user_id)
@@ -184,7 +184,7 @@ async def animated_subscription_check(message, user_id, context=None, edit=False
         # Message final de succès
         await msg.edit_text(
             "✅ *Abonnement vérifié!*\n\n"
-            "Vous êtes bien abonné à [AL VE CAPITAL](https://t.me/alvecapital1).\n"
+            "Vous êtes bien abonné à [AL VE CAPITAL](https://t.me/alvecapitalofficiel).\n"
             "Toutes les fonctionnalités sont désormais accessibles.",
             parse_mode='Markdown',
             disable_web_page_preview=True
@@ -251,7 +251,7 @@ async def animated_subscription_check(message, user_id, context=None, edit=False
         
         await msg.edit_text(
             "❌ *Abonnement non détecté*\n\n"
-            "Vous n'êtes pas encore abonné à [AL VE CAPITAL](https://t.me/alvecapital1).\n\n"
+            "Vous n'êtes pas encore abonné à [AL VE CAPITAL](https://t.me/alvecapitalofficiel).\n\n"
             "*Instructions:*\n"
             "1️⃣ Cliquez sur le bouton 'Rejoindre le canal'\n"
             "2️⃣ Abonnez-vous au canal\n"
@@ -275,7 +275,7 @@ async def send_subscription_required(message) -> None:
         "⚠️ *Abonnement requis*\n\n"
         "Pour utiliser cette fonctionnalité, vous devez être abonné à notre canal.\n\n"
         "*Instructions:*\n"
-        "1️⃣ Rejoignez [AL VE CAPITAL](https://t.me/alvecapital1)\n"
+        "1️⃣ Rejoignez [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n"
         "2️⃣ Cliquez sur '🔍 Vérifier mon abonnement'",
         reply_markup=reply_markup,
         parse_mode='Markdown',

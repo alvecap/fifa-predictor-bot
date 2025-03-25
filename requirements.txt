@@ -4,3 +4,4 @@ oauth2client
 flask
 flask-cors
 gunicorn
+supabase>=0.7.1

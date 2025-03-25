@@ -1,6 +1,11 @@
+# referral_system.py
+
 import logging
 from typing import Optional, List, Dict, Any
 from supabase import create_client, Client
+
+# Importer les configurations
+from config_supabase import SUPABASE_URL, SUPABASE_KEY, MAX_REFERRALS
 
 # Configuration du logging
 logging.basicConfig(
@@ -9,15 +14,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# URL et clé Supabase (à remplacer par vos valeurs)
-SUPABASE_URL = "VOTRE_URL_SUPABASE"
-SUPABASE_KEY = "VOTRE_CLE_SUPABASE"
-
 # Initialisation du client Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Nombre maximum de parrainages autorisés par utilisateur
-MAX_REFERRALS = 1  # Changez à 2 si vous voulez autoriser 2 parrainages
 
 async def register_user(user_id: int, username: str = None, referrer_id: int = None) -> bool:
     """
@@ -42,22 +40,28 @@ async def register_user(user_id: int, username: str = None, referrer_id: int = N
             if referrer_id is not None:
                 existing_user = await get_user_data(user_id)
                 if existing_user and existing_user.get('referrer_id') is None:
-                    await supabase.table('users').update({
-                        'referrer_id': referrer_id
-                    }).eq('id', user_id).execute()
-                    logger.info(f"Updated user {user_id} with referrer {referrer_id}")
-                    return True
-            return True  # Utilisateur déjà existant, rien à faire
+                    # Éviter l'auto-parrainage
+                    if referrer_id != user_id:
+                        resp = await supabase.table('users').update({
+                            'referrer_id': referrer_id
+                        }).eq('id', user_id).execute()
+                        logger.info(f"Updated user {user_id} with referrer {referrer_id}")
+                    else:
+                        logger.warning(f"Prevented self-referral for user {user_id}")
+            return True  # Utilisateur déjà existant
         
         # Créer un nouvel utilisateur
+        # Éviter l'auto-parrainage
+        if referrer_id == user_id:
+            referrer_id = None
+            
         data = {
             'id': user_id,
             'username': username,
-            'referrer_id': referrer_id,
-            'created_at': 'now()'
+            'referrer_id': referrer_id
         }
         
-        await supabase.table('users').insert(data).execute()
+        resp = await supabase.table('users').insert(data).execute()
         logger.info(f"New user registered: {user_id}, referred by: {referrer_id}")
         return True
         

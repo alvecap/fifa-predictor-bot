@@ -589,24 +589,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
             
         # Vérifier aussi le parrainage
-        # Vérifier aussi le parrainage
-       has_completed = await has_completed_referrals(user_id)
-       if not has_completed:
-           # Message d'erreur si le parrainage n'est pas complété
-           keyboard = [
-               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
-               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Parrainage requis*\n\n"
-               f"Pour accéder aux prédictions, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
-               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown'
-           )
-           return
+        # Vérifier le parrainage
+    has_completed = await has_completed_referrals(user_id)
+    if not has_completed:
+        keyboard = [
+            [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+            [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "⚠️ *Parrainage requis*\n\n"
+            f"Pour accéder aux prédictions, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
+            "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return
        
        # Lancer la sélection des équipes
        await start_team_selection(query.message, context, edit=True)

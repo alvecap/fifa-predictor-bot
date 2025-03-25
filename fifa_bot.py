@@ -198,7 +198,8 @@ async def animated_subscription_check(message, user_id, context=None, edit=False
             if not has_completed:
                 # Si le parrainage n'est pas complété, afficher un message
                 keyboard = [
-                    [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")]
+                    [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+                    [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
@@ -262,6 +263,123 @@ async def animated_subscription_check(message, user_id, context=None, edit=False
         )
         return False
 
+# Animation de vérification de parrainage
+async def animated_referral_check(message, user_id, context=None, edit=False) -> bool:
+    """Effectue une vérification de parrainage avec animation et retourne le résultat."""
+    # Message initial
+    verify_text = "🔍 *Vérification de votre parrainage*"
+    
+    if edit:
+        msg = await message.edit_text(verify_text, parse_mode='Markdown')
+    else:
+        msg = await message.reply_text(verify_text, parse_mode='Markdown')
+    
+    # Animation stylisée (cercle qui tourne)
+    emojis = ["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"]
+    
+    for i in range(len(emojis)):
+        await msg.edit_text(
+            f"{emojis[i]} *Vérification de vos parrainages en cours...*",
+            parse_mode='Markdown'
+        )
+        await asyncio.sleep(0.2)  # Animation rapide mais visible
+    
+    # Pause pour effet
+    await msg.edit_text(
+        "🔄 *Analyse des données...*",
+        parse_mode='Markdown'
+    )
+    await asyncio.sleep(0.5)
+    
+    # Animation plus longue (au moins 3 secondes total)
+    check_frames = [
+        "📊 *Recherche de vos filleuls...*",
+        "👥 *Comptage des parrainages...*",
+        "📈 *Vérification des conditions...*"
+    ]
+    
+    for frame in check_frames:
+        await msg.edit_text(frame, parse_mode='Markdown')
+        await asyncio.sleep(0.7)  # Plus lent pour atteindre 3 secondes minimum
+    
+    # Effectuer la vérification
+    has_completed = await has_completed_referrals(user_id)
+    
+    if has_completed:
+        # Animation de succès
+        success_frames = [
+            "⬜⬜⬜⬜⬜",
+            "⬛⬜⬜⬜⬜",
+            "⬛⬛⬜⬜⬜",
+            "⬛⬛⬛⬜⬜",
+            "⬛⬛⬛⬛⬜",
+            "⬛⬛⬛⬛⬛",
+            "✅ *Parrainage complété!*"
+        ]
+        
+        for frame in success_frames:
+            await msg.edit_text(frame, parse_mode='Markdown')
+            await asyncio.sleep(0.2)
+        
+        # Message final de succès
+        await msg.edit_text(
+            "✅ *Parrainage complété!*\n\n"
+            f"Vous avez atteint votre objectif de {MAX_REFERRALS} parrainage(s).\n"
+            "Toutes les fonctionnalités sont désormais débloquées.",
+            parse_mode='Markdown'
+        )
+        
+        # Ajouter bouton pour commencer une prédiction
+        if context:
+            keyboard = [
+                [InlineKeyboardButton("🏆 Faire une prédiction", callback_data="start_prediction")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await asyncio.sleep(0.8)
+            await message.reply_text(
+                "🔮 *Prêt pour une prédiction*\n\n"
+                "Vous pouvez maintenant faire des prédictions!",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        
+        return True
+    else:
+        # Animation d'échec
+        error_frames = [
+            "⬜⬜⬜⬜⬜",
+            "⬛⬜⬜⬜⬜",
+            "⬛⬛⬜⬜⬜",
+            "⬛⬛⬛⬜⬜",
+            "⬛⬛⬛⬛⬜",
+            "⬛⬛⬛⬛⬛",
+            "⏳ *Parrainage en cours*"
+        ]
+        
+        for frame in error_frames:
+            await msg.edit_text(frame, parse_mode='Markdown')
+            await asyncio.sleep(0.2)
+        
+        # Obtenir le nombre actuel de parrainages
+        referral_count = await count_referrals(user_id)
+        
+        # Message indiquant le nombre actuel de parrainages
+        keyboard = [
+            [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+            [InlineKeyboardButton("✅ Vérifier à nouveau", callback_data="verify_referral")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await msg.edit_text(
+            f"⏳ *Parrainage en cours - {referral_count}/{MAX_REFERRALS}*\n\n"
+            f"Vous avez actuellement {referral_count} parrainage(s) sur {MAX_REFERRALS} requis.\n\n"
+            f"Partagez votre lien de parrainage pour débloquer toutes les fonctionnalités.",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+        return False
+
 # Message standard quand l'abonnement est requis
 async def send_subscription_required(message) -> None:
     """Envoie un message indiquant que l'abonnement est nécessaire."""
@@ -286,7 +404,8 @@ async def send_subscription_required(message) -> None:
 async def send_referral_required(message) -> None:
     """Envoie un message indiquant que le parrainage est nécessaire."""
     keyboard = [
-        [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")]
+        [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+        [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -357,10 +476,14 @@ async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             message_text += f"• {user_username}{user_id_text}\n"
     
     # Créer les boutons
-    keyboard = [
+    buttons = [
         [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if not has_completed:
+        buttons.append([InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")])
+    
+    reply_markup = InlineKeyboardMarkup(buttons)
     
     await update.message.reply_text(
         message_text,
@@ -404,6 +527,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Utiliser l'animation de vérification avec le contexte
         await animated_subscription_check(query.message, user_id, context, edit=True)
     
+    elif query.data == "verify_referral":
+        # Vérifier le parrainage avec animation
+        await animated_referral_check(query.message, user_id, context, edit=True)
+    
     elif query.data == "get_referral_link":
         # Générer et afficher un lien de parrainage
         bot_info = await context.bot.get_me()
@@ -413,13 +540,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Obtenir le nombre actuel de parrainages
         referral_count = await count_referrals(user_id)
         
+        # Créer les boutons
+        keyboard = [
+            [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")],
+            [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await query.edit_message_text(
             f"🔗 *Votre lien de parrainage:*\n\n"
             f"`{referral_link}`\n\n"
-            f"Progression: {referral_count}/{MAX_REFERRALS} parrainage(s)\n\n"
-            f"Partagez ce lien avec vos amis pour qu'ils rejoignent le bot. "
-            f"Lorsqu'ils utiliseront votre lien, vous serez crédité d'un parrainage.",
-            parse_mode='Markdown'
+            f"_Progression: {referral_count}/{MAX_REFERRALS} parrainage(s) • Partagez ce lien et invitez vos amis! 🤝_",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
         )
     
     elif query.data == "copy_referral_link":
@@ -453,7 +586,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not has_completed:
             # Message d'erreur si le parrainage n'est pas complété
             keyboard = [
-                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")]
+                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+                [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -500,7 +634,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         has_completed = await has_completed_referrals(user_id)
         if not has_completed:
             keyboard = [
-                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")]
+                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+                [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -556,7 +691,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         has_completed = await has_completed_referrals(user_id)
         if not has_completed:
             keyboard = [
-                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")]
+                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+                [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -595,7 +731,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await query.edit_message_text(frame, parse_mode='Markdown')
             await asyncio.sleep(0.3)
         
-        # Demander la première cote
         # Demander la première cote
         await query.edit_message_text(
             f"💰 *Saisie des cotes (obligatoire)*\n\n"
@@ -640,7 +775,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         has_completed = await has_completed_referrals(user_id)
         if not has_completed:
             keyboard = [
-                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")]
+                [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+                [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -781,6 +917,7 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
     if not context.user_data.get("awaiting_odds_team1", False):
         return ConversationHandler.END
     
+    # Vérifier l'abonnement
     # Vérifier l'abonnement
     user_id = update.effective_user.id
     is_subscribed = await check_user_subscription(user_id)
@@ -1126,6 +1263,7 @@ def main() -> None:
         # Ajouter le gestionnaire pour les clics sur les boutons
         application.add_handler(CallbackQueryHandler(button_callback))
         
+        # Ajouter le gestionnaire pour les messages normaux (après le ConversationHandler)
         # Ajouter le gestionnaire pour les messages normaux (après le ConversationHandler)
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         

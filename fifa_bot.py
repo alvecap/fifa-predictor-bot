@@ -14,7 +14,7 @@ from telegram.ext import (
 )
 
 from config import TELEGRAM_TOKEN, WELCOME_MESSAGE, HELP_MESSAGE, TEAM_INPUT, ODDS_INPUT
-from database import get_all_teams, save_prediction_log
+from database import get_all_teams, save_prediction_log, check_user_subscription
 from predictor import MatchPredictor, format_prediction_message
 # Importer les fonctions du système de parrainage
 from referral_system import (

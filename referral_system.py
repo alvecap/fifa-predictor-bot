@@ -1,11 +1,11 @@
-import os
 import logging
 import asyncio
 from datetime import datetime
 from telegram import Bot
 from telegram.error import TelegramError
-from supabase import create_client, Client
-from config import TELEGRAM_TOKEN
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from config import TELEGRAM_TOKEN, CREDENTIALS_FILE, SPREADSHEET_ID
 
 # Configuration du logging
 logging.basicConfig(
@@ -17,22 +17,17 @@ logger = logging.getLogger(__name__)
 # Nombre maximum de parrainages requis
 MAX_REFERRALS = 1
 
-# Initialisation de la connexion Supabase (utilise les variables d'environnement)
-def get_supabase_client() -> Client:
-    """Crée et retourne un client Supabase en utilisant les variables d'environnement"""
+# Connexion à Google Sheets
+def connect_to_sheets():
+    """Établit la connexion avec Google Sheets"""
     try:
-        # Les variables d'environnement sont définies sur Render
-        supabase_url = os.environ.get("SUPABASE_URL")
-        supabase_key = os.environ.get("SUPABASE_KEY")
-        
-        if not supabase_url or not supabase_key:
-            logger.error("Variables d'environnement SUPABASE_URL ou SUPABASE_KEY non définies")
-            return None
-        
-        return create_client(supabase_url, supabase_key)
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
+        client = gspread.authorize(credentials)
+        return client.open_by_key(SPREADSHEET_ID)
     except Exception as e:
-        logger.error(f"Erreur lors de la création du client Supabase: {e}")
-        return None
+        logger.error(f"Erreur de connexion à Google Sheets: {e}")
+        raise
 
 async def register_user(user_id, username, referrer_id=None):
     """
@@ -48,68 +43,103 @@ async def register_user(user_id, username, referrer_id=None):
         bool: True si l'opération a réussi, False sinon
     """
     try:
-        supabase = get_supabase_client()
-        if not supabase:
-            return False
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        # Récupérer ou créer la feuille des utilisateurs
+        try:
+            users_sheet = spreadsheet.worksheet("Utilisateurs")
+        except gspread.exceptions.WorksheetNotFound:
+            # Si la feuille n'existe pas, on la crée
+            users_sheet = spreadsheet.add_worksheet(title="Utilisateurs", rows=1000, cols=5)
+            # Ajouter les en-têtes
+            users_sheet.update('A1:E1', [['ID Telegram', 'Username', 'Date d\'inscription', 'Dernière activité', 'Parrainé par']])
         
         # Vérifier si l'utilisateur existe déjà
-        response = supabase.table("users").select("*").eq("telegram_id", user_id).execute()
-        
-        current_time = datetime.now().isoformat()
-        
-        # Si l'utilisateur n'existe pas encore, l'ajouter
-        if not response.data:
-            user_data = {
-                "telegram_id": user_id,
-                "username": username,
-                "created_at": current_time,
-                "last_active": current_time
-            }
+        try:
+            user_cell = users_sheet.find(str(user_id))
+            # Utilisateur trouvé, mise à jour
+            row_index = user_cell.row
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            supabase.table("users").insert(user_data).execute()
-            logger.info(f"Nouvel utilisateur enregistré: {user_id} ({username})")
-        else:
-            # Mettre à jour l'utilisateur existant
-            supabase.table("users").update({
-                "username": username, 
-                "last_active": current_time
-            }).eq("telegram_id", user_id).execute()
-        
-        # Si un parrain est spécifié et que ce n'est pas l'utilisateur lui-même
-        if referrer_id and referrer_id != user_id:
-            # Vérifier si la relation de parrainage existe déjà
-            ref_response = supabase.table("referrals").select("*").eq("user_id", user_id).execute()
+            # Mettre à jour le nom d'utilisateur et la date d'activité
+            users_sheet.update_cell(row_index, 2, username or "Inconnu")
+            users_sheet.update_cell(row_index, 4, current_time)
             
-            if not ref_response.data:
-                # Vérifier si le parrain existe
-                referrer_response = supabase.table("users").select("*").eq("telegram_id", referrer_id).execute()
-                
-                if referrer_response.data:
+            # Si un parrain est spécifié et que ce n'est pas déjà enregistré, le mettre à jour
+            if referrer_id and referrer_id != user_id:
+                current_referrer = users_sheet.cell(row_index, 5).value
+                if not current_referrer:
+                    users_sheet.update_cell(row_index, 5, str(referrer_id))
+                    
                     # Créer la relation de parrainage
-                    referral_data = {
-                        "user_id": user_id,
-                        "referrer_id": referrer_id,
-                        "created_at": current_time,
-                        "is_verified": False
-                    }
-                    
-                    supabase.table("referrals").insert(referral_data).execute()
-                    logger.info(f"Relation de parrainage créée: {referrer_id} -> {user_id}")
-                    
-                    # Envoyer en parallèle la vérification d'abonnement
-                    asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
-                    
-                    return True
+                    await create_referral_relationship(user_id, referrer_id)
+            
+        except gspread.exceptions.CellNotFound:
+            # Utilisateur non trouvé, ajout
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            new_row = [str(user_id), username or "Inconnu", current_time, current_time, str(referrer_id) if referrer_id and referrer_id != user_id else ""]
+            users_sheet.append_row(new_row)
+            
+            # Si un parrain est spécifié, créer la relation de parrainage
+            if referrer_id and referrer_id != user_id:
+                await create_referral_relationship(user_id, referrer_id)
         
         return True
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement de l'utilisateur: {e}")
         return False
 
+async def create_referral_relationship(user_id, referrer_id):
+    """
+    Crée une relation de parrainage dans la feuille de calcul.
+    
+    Args:
+        user_id (int): ID Telegram de l'utilisateur parrainé
+        referrer_id (int): ID Telegram du parrain
+    """
+    try:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        # Récupérer ou créer la feuille des parrainages
+        try:
+            referrals_sheet = spreadsheet.worksheet("Parrainages")
+        except gspread.exceptions.WorksheetNotFound:
+            # Si la feuille n'existe pas, on la crée
+            referrals_sheet = spreadsheet.add_worksheet(title="Parrainages", rows=1000, cols=5)
+            # Ajouter les en-têtes
+            referrals_sheet.update('A1:E1', [['Parrain ID', 'Filleul ID', 'Date', 'Vérifié', 'Date de vérification']])
+        
+        # Vérifier si la relation de parrainage existe déjà
+        try:
+            # Chercher à la fois le parrain et le filleul pour être sûr
+            referrals = referrals_sheet.get_all_values()
+            relationship_exists = False
+            
+            for row in referrals[1:]:  # Ignorer l'en-tête
+                if len(row) >= 2 and row[0] == str(referrer_id) and row[1] == str(user_id):
+                    relationship_exists = True
+                    break
+            
+            if not relationship_exists:
+                # Créer la relation
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                new_row = [str(referrer_id), str(user_id), current_time, "Non", ""]
+                referrals_sheet.append_row(new_row)
+                
+                # Lancer la vérification d'abonnement en arrière-plan
+                asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
+        
+        except Exception as e:
+            logger.error(f"Erreur lors de la recherche ou création de la relation de parrainage: {e}")
+    
+    except Exception as e:
+        logger.error(f"Erreur lors de la création de la relation de parrainage: {e}")
+
 async def verify_and_update_referral(user_id, referrer_id):
     """
     Vérifie si l'utilisateur est abonné au canal et met à jour le statut de parrainage.
-    Cette fonction est appelée en arrière-plan lors de l'enregistrement d'un parrainage.
     
     Args:
         user_id (int): ID Telegram de l'utilisateur
@@ -123,17 +153,27 @@ async def verify_and_update_referral(user_id, referrer_id):
         is_subscribed = await check_channel_subscription(user_id)
         
         if is_subscribed:
-            # Mettre à jour le statut de vérification dans la base de données
-            supabase = get_supabase_client()
-            if supabase:
-                supabase.table("referrals").update({
-                    "is_verified": True,
-                    "verified_at": datetime.now().isoformat()
-                }).eq("user_id", user_id).eq("referrer_id", referrer_id).execute()
+            try:
+                # Connexion à Google Sheets
+                spreadsheet = connect_to_sheets()
+                referrals_sheet = spreadsheet.worksheet("Parrainages")
                 
-                logger.info(f"Parrainage vérifié: {referrer_id} -> {user_id}")
+                # Trouver la relation de parrainage
+                referrals = referrals_sheet.get_all_values()
+                for i, row in enumerate(referrals[1:], start=2):  # Start=2 pour tenir compte de l'en-tête
+                    if len(row) >= 2 and row[0] == str(referrer_id) and row[1] == str(user_id):
+                        # Mettre à jour le statut de vérification
+                        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        referrals_sheet.update_cell(i, 4, "Oui")
+                        referrals_sheet.update_cell(i, 5, current_time)
+                        logger.info(f"Parrainage vérifié: {referrer_id} -> {user_id}")
+                        break
+            
+            except Exception as e:
+                logger.error(f"Erreur lors de la mise à jour du statut de parrainage: {e}")
         else:
             logger.info(f"Utilisateur {user_id} non abonné, parrainage non vérifié")
+    
     except Exception as e:
         logger.error(f"Erreur lors de la vérification du parrainage: {e}")
 
@@ -191,18 +231,27 @@ async def count_referrals(user_id):
         int: Le nombre de parrainages vérifiés
     """
     try:
-        supabase = get_supabase_client()
-        if not supabase:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        try:
+            referrals_sheet = spreadsheet.worksheet("Parrainages")
+            
+            # Récupérer tous les parrainages
+            referrals = referrals_sheet.get_all_values()
+            
+            # Compter les parrainages vérifiés où l'utilisateur est le parrain
+            count = 0
+            for row in referrals[1:]:  # Ignorer l'en-tête
+                if len(row) >= 4 and row[0] == str(user_id) and row[3] == "Oui":
+                    count += 1
+            
+            return count
+        
+        except gspread.exceptions.WorksheetNotFound:
+            # La feuille n'existe pas, donc aucun parrainage
             return 0
-        
-        # Récupérer uniquement les parrainages vérifiés où l'utilisateur est le parrain
-        response = supabase.table("referrals").select("count").eq("referrer_id", user_id).eq("is_verified", True).execute()
-        
-        # Retourner le nombre de parrainages
-        if response.data and isinstance(response.data, list) and len(response.data) > 0:
-            return response.data[0].get("count", 0)
-        
-        return 0
+    
     except Exception as e:
         logger.error(f"Erreur lors du comptage des parrainages: {e}")
         return 0
@@ -215,30 +264,59 @@ async def get_referred_users(user_id):
         user_id (int): ID Telegram de l'utilisateur
         
     Returns:
-        list: Liste des utilisateurs parrainés
+        list: Liste des utilisateurs parrainés avec leurs informations
     """
     try:
-        supabase = get_supabase_client()
-        if not supabase:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        try:
+            referrals_sheet = spreadsheet.worksheet("Parrainages")
+            users_sheet = spreadsheet.worksheet("Utilisateurs")
+            
+            # Récupérer tous les parrainages
+            referrals = referrals_sheet.get_all_values()
+            
+            # Filtrer les parrainages où l'utilisateur est le parrain
+            referred_user_ids = []
+            referred_status = {}
+            
+            for row in referrals[1:]:  # Ignorer l'en-tête
+                if len(row) >= 4 and row[0] == str(user_id):
+                    filleul_id = row[1]
+                    referred_user_ids.append(filleul_id)
+                    referred_status[filleul_id] = row[3] == "Oui"  # Vérification du statut "Oui"
+            
+            # Récupérer les informations des utilisateurs parrainés
+            referred_users = []
+            
+            for filleul_id in referred_user_ids:
+                try:
+                    user_cell = users_sheet.find(filleul_id)
+                    row_values = users_sheet.row_values(user_cell.row)
+                    
+                    # S'assurer qu'il y a suffisamment de valeurs
+                    if len(row_values) >= 2:
+                        username = row_values[1]
+                        referred_users.append({
+                            'id': filleul_id,
+                            'username': username,
+                            'is_verified': referred_status.get(filleul_id, False)
+                        })
+                except gspread.exceptions.CellNotFound:
+                    # Utilisateur non trouvé
+                    referred_users.append({
+                        'id': filleul_id,
+                        'username': 'Inconnu',
+                        'is_verified': referred_status.get(filleul_id, False)
+                    })
+            
+            return referred_users
+        
+        except gspread.exceptions.WorksheetNotFound:
+            # Une ou les deux feuilles n'existent pas
             return []
-        
-        # Jointure entre les tables referrals et users pour obtenir les détails des filleuls
-        query = """
-            SELECT u.telegram_id as id, u.username, r.created_at, r.is_verified
-            FROM referrals r
-            JOIN users u ON r.user_id = u.telegram_id
-            WHERE r.referrer_id = ?
-            ORDER BY r.created_at DESC
-        """
-        
-        # Exécuter la requête SQL
-        response = supabase.rpc("get_referred_users", {"user_id_param": user_id}).execute()
-        
-        # Retourner la liste des utilisateurs parrainés
-        if response.data:
-            return response.data
-        
-        return []
+    
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des utilisateurs parrainés: {e}")
         return []

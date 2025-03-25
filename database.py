@@ -4,8 +4,6 @@ from collections import defaultdict, Counter
 import logging
 from datetime import datetime
 from config import CREDENTIALS_FILE, SPREADSHEET_ID
-from telegram import Bot
-from typing import Optional
 
 # Configuration du logging
 logging.basicConfig(
@@ -264,63 +262,236 @@ def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None,
         logger.error(f"Erreur lors de l'enregistrement du log: {e}")
         return False
 
-async def check_user_subscription(user_id):
-    """Vérifie si un utilisateur est abonné au canal @alvecapital1"""
-    from config import TELEGRAM_TOKEN
-    
-    try:
-        # Créer une instance du bot
-        bot = Bot(token=TELEGRAM_TOKEN)
-        
-        # Vérifier si l'utilisateur est membre du canal
-        chat_member = await bot.get_chat_member(chat_id="@alvecapital1", user_id=user_id)
-        
-        # Statuts indiquant que l'utilisateur est membre
-        member_statuses = ['creator', 'administrator', 'member']
-        
-        # Vérifier le statut d'abonnement
-        is_subscribed = chat_member.status in member_statuses
-        
-        logger.info(f"Vérification d'abonnement pour l'utilisateur {user_id}: {is_subscribed}")
-        
-        # Enregistrer la vérification
-        save_subscription_log(user_id, None, is_subscribed)
-        
-        return is_subscribed
-        
-    except Exception as e:
-        logger.error(f"Erreur lors de la vérification d'abonnement: {e}")
-        # En cas d'erreur, considérer comme non abonné
-        return False
-
-def save_subscription_log(user_id, username, subscribed=False):
-    """Enregistre les vérifications d'abonnement pour analyse future"""
+# Fonctions pour le système de parrainage
+async def register_user(user_id, username, referrer_id=None):
+    """Enregistre un utilisateur dans la base de données et gère le parrainage"""
     try:
         # Connexion à Google Sheets
         spreadsheet = connect_to_sheets()
         
-        # Récupérer ou créer la feuille de logs d'abonnement
+        # Récupérer ou créer la feuille des utilisateurs
         try:
-            sub_sheet = spreadsheet.worksheet("Logs des abonnements")
+            users_sheet = spreadsheet.worksheet("Utilisateurs")
         except gspread.exceptions.WorksheetNotFound:
-            sub_sheet = spreadsheet.add_worksheet(title="Logs des abonnements", rows=1000, cols=5)
+            users_sheet = spreadsheet.add_worksheet(title="Utilisateurs", rows=1000, cols=6)
             # Ajouter les en-têtes
-            sub_sheet.update('A1:E1', [['Date', 'User ID', 'Username', 'Abonné', 'Action']])
+            users_sheet.update('A1:F1', [['ID', 'Username', 'Date inscription', 'Parrain ID', 'Parrainages', 'Dernier accès']])
         
-        # Obtenir la date actuelle
-        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Vérifier si l'utilisateur existe déjà
+        try:
+            user_cell = users_sheet.find(str(user_id))
+            user_row = user_cell.row
+            
+            # Mettre à jour l'entrée existante (date de dernier accès)
+            current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            users_sheet.update_cell(user_row, 6, current_date)  # Colonne F
+            
+            logger.info(f"Utilisateur {user_id} mis à jour")
+            
+            # Si un parrain est fourni et que l'utilisateur n'a pas de parrain, ajouter le parrain
+            if referrer_id:
+                existing_referrer = users_sheet.cell(user_row, 4).value  # Colonne D
+                if not existing_referrer or existing_referrer == "None":
+                    users_sheet.update_cell(user_row, 4, str(referrer_id))
+                    
+                    # Incrémenter le compteur de parrainages du parrain
+                    await increment_referral_count(spreadsheet, referrer_id)
+                    
+                    logger.info(f"Parrain {referrer_id} ajouté pour l'utilisateur {user_id}")
+                
+            return True
+        except gspread.exceptions.CellNotFound:
+            # L'utilisateur n'existe pas, l'ajouter
+            current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            users_sheet.append_row([
+                str(user_id),
+                username or "Inconnu",
+                current_date,
+                str(referrer_id) if referrer_id else "None",
+                "0",
+                current_date
+            ])
+            
+            # Si un parrain est fourni, incrémenter son compteur de parrainages
+            if referrer_id:
+                await increment_referral_count(spreadsheet, referrer_id)
+                
+            logger.info(f"Nouvel utilisateur enregistré: {user_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement de l'utilisateur: {e}")
+        return False
+
+async def increment_referral_count(spreadsheet, referrer_id):
+    """Incrémente le compteur de parrainages d'un utilisateur"""
+    try:
+        users_sheet = spreadsheet.worksheet("Utilisateurs")
         
-        # Ajouter l'entrée de log
-        sub_sheet.append_row([
-            current_date,
-            str(user_id),
-            username or "Inconnu",
-            "Oui" if subscribed else "Non",
-            "Vérification"
-        ])
+        # Trouver la cellule du parrain
+        referrer_cell = users_sheet.find(str(referrer_id))
+        referrer_row = referrer_cell.row
         
-        logger.info(f"Log d'abonnement enregistré pour l'utilisateur {user_id}")
+        # Récupérer le nombre actuel de parrainages
+        current_count_str = users_sheet.cell(referrer_row, 5).value  # Colonne E
+        if current_count_str and current_count_str.isdigit():
+            current_count = int(current_count_str)
+        else:
+            current_count = 0
+        
+        # Incrémenter et mettre à jour
+        new_count = current_count + 1
+        users_sheet.update_cell(referrer_row, 5, str(new_count))
+        
+        logger.info(f"Compteur de parrainages de {referrer_id} incrémenté à {new_count}")
         return True
     except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement du log d'abonnement: {e}")
+        logger.error(f"Erreur lors de l'incrémentation du compteur de parrainages: {e}")
         return False
+
+async def count_referrals(user_id):
+    """Retourne le nombre de parrainages d'un utilisateur"""
+    try:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        users_sheet = spreadsheet.worksheet("Utilisateurs")
+        
+        # Trouver la cellule de l'utilisateur
+        user_cell = users_sheet.find(str(user_id))
+        user_row = user_cell.row
+        
+        # Récupérer le nombre de parrainages
+        referrals_count_str = users_sheet.cell(user_row, 5).value  # Colonne E
+        
+        if referrals_count_str and referrals_count_str.isdigit():
+            return int(referrals_count_str)
+        else:
+            return 0
+    except gspread.exceptions.CellNotFound:
+        logger.warning(f"Utilisateur {user_id} non trouvé dans la base de données")
+        return 0
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération du nombre de parrainages: {e}")
+        return 0
+
+async def has_completed_referrals(user_id, required_count=1):
+    """Vérifie si l'utilisateur a atteint le nombre requis de parrainages"""
+    referrals_count = await count_referrals(user_id)
+    return referrals_count >= required_count
+
+async def generate_referral_link(user_id, bot_username):
+    """Génère un lien de parrainage pour l'utilisateur"""
+    return f"https://t.me/{bot_username}?start=ref_{user_id}"
+
+async def get_referred_users(user_id):
+    """Récupère la liste des utilisateurs parrainés par l'utilisateur donné"""
+    try:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        users_sheet = spreadsheet.worksheet("Utilisateurs")
+        
+        # Récupérer toutes les données
+        all_values = users_sheet.get_all_values()
+        
+        # Trouver l'index de la colonne de parrain
+        header_row = all_values[0]
+        referrer_col_idx = header_row.index("Parrain ID") if "Parrain ID" in header_row else 3  # Par défaut colonne D
+        user_id_col_idx = header_row.index("ID") if "ID" in header_row else 0  # Par défaut colonne A
+        username_col_idx = header_row.index("Username") if "Username" in header_row else 1  # Par défaut colonne B
+        
+        # Filtrer les utilisateurs qui ont l'ID de l'utilisateur comme parrain
+        referred_users = []
+        for row in all_values[1:]:  # Ignore header row
+            if len(row) > referrer_col_idx and row[referrer_col_idx] == str(user_id):
+                referred_users.append({
+                    "id": row[user_id_col_idx] if len(row) > user_id_col_idx else "Unknown",
+                    "username": row[username_col_idx] if len(row) > username_col_idx else "Unknown"
+                })
+        
+        return referred_users
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des utilisateurs parrainés: {e}")
+        return []
+
+def save_referral(user_id, username, referral_link):
+    """Enregistre un lien de parrainage dans la base de données"""
+    try:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        # Récupérer ou créer la feuille des liens de parrainage
+        try:
+            referrals_sheet = spreadsheet.worksheet("Liens de parrainage")
+        except gspread.exceptions.WorksheetNotFound:
+            referrals_sheet = spreadsheet.add_worksheet(title="Liens de parrainage", rows=1000, cols=4)
+            # Ajouter les en-têtes
+            referrals_sheet.update('A1:D1', [['User ID', 'Username', 'Lien', 'Date création']])
+        
+        # Vérifier si l'utilisateur a déjà un lien
+        try:
+            user_cell = referrals_sheet.find(str(user_id))
+            user_row = user_cell.row
+            
+            # Mettre à jour le lien existant
+            current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            referrals_sheet.update_cell(user_row, 3, referral_link)  # Colonne C
+            referrals_sheet.update_cell(user_row, 4, current_date)  # Colonne D
+            
+            logger.info(f"Lien de parrainage mis à jour pour l'utilisateur {user_id}")
+        except gspread.exceptions.CellNotFound:
+            # L'utilisateur n'a pas de lien, en créer un nouveau
+            current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            referrals_sheet.append_row([
+                str(user_id),
+                username or "Inconnu",
+                referral_link,
+                current_date
+            ])
+            
+            logger.info(f"Nouveau lien de parrainage créé pour l'utilisateur {user_id}")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement du lien de parrainage: {e}")
+        return False
+
+def check_referral_status(user_id):
+    """Vérifie le statut de parrainage d'un utilisateur"""
+    try:
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        users_sheet = spreadsheet.worksheet("Utilisateurs")
+        
+        # Trouver la cellule de l'utilisateur
+        user_cell = users_sheet.find(str(user_id))
+        user_row = user_cell.row
+        user_data = users_sheet.row_values(user_row)
+        
+        # Récupérer les données pertinentes
+        if len(user_data) >= 5:
+            username = user_data[1]
+            registration_date = user_data[2]
+            referrer_id = user_data[3] if user_data[3] != "None" else None
+            referrals_count = int(user_data[4]) if user_data[4].isdigit() else 0
+            
+            return {
+                "user_id": user_id,
+                "username": username,
+                "registration_date": registration_date,
+                "referrer_id": referrer_id,
+                "referrals_count": referrals_count
+            }
+        else:
+            logger.warning(f"Données incomplètes pour l'utilisateur {user_id}")
+            return None
+    except gspread.exceptions.CellNotFound:
+        logger.warning(f"Utilisateur {user_id} non trouvé dans la base de données")
+        return None
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification du statut de parrainage: {e}")
+        return None
+
+async def check_user_subscription(user_id):
+    """Vérifie si un utilisateur est abonné au canal"""
+    # Cette fonction serait normalement implémentée avec l'API Telegram
+    # Pour l'instant, nous retournons simplement True pour simuler un abonnement
+    return True

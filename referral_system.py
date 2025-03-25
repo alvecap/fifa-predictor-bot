@@ -1,11 +1,11 @@
-# referral_system.py
-
+import os
 import logging
-from typing import Optional, List, Dict, Any
+import asyncio
+from datetime import datetime
+from telegram import Bot
+from telegram.error import TelegramError
 from supabase import create_client, Client
-
-# Importer les configurations
-from config_supabase import SUPABASE_URL, SUPABASE_KEY, MAX_REFERRALS
+from config import TELEGRAM_TOKEN
 
 # Configuration du logging
 logging.basicConfig(
@@ -14,172 +14,260 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialisation du client Supabase
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Nombre maximum de parrainages requis
+MAX_REFERRALS = 1
 
-async def register_user(user_id: int, username: str = None, referrer_id: int = None) -> bool:
+# Initialisation de la connexion Supabase (utilise les variables d'environnement)
+def get_supabase_client() -> Client:
+    """Crée et retourne un client Supabase en utilisant les variables d'environnement"""
+    try:
+        # Les variables d'environnement sont définies sur Render
+        supabase_url = os.environ.get("SUPABASE_URL")
+        supabase_key = os.environ.get("SUPABASE_KEY")
+        
+        if not supabase_url or not supabase_key:
+            logger.error("Variables d'environnement SUPABASE_URL ou SUPABASE_KEY non définies")
+            return None
+        
+        return create_client(supabase_url, supabase_key)
+    except Exception as e:
+        logger.error(f"Erreur lors de la création du client Supabase: {e}")
+        return None
+
+async def register_user(user_id, username, referrer_id=None):
     """
-    Enregistre un nouvel utilisateur dans la base de données.
-    Si referrer_id est fourni, établit la relation de parrainage.
+    Enregistre ou met à jour un utilisateur dans la base de données.
+    Si referrer_id est fourni, crée une relation de parrainage.
     
     Args:
-        user_id: ID Telegram de l'utilisateur
-        username: Nom d'utilisateur Telegram (optionnel)
-        referrer_id: ID de l'utilisateur qui a parrainé (optionnel)
+        user_id (int): ID Telegram de l'utilisateur
+        username (str): Nom d'utilisateur Telegram
+        referrer_id (int, optional): ID Telegram du parrain
     
     Returns:
-        bool: True si l'enregistrement a réussi, False sinon
+        bool: True si l'opération a réussi, False sinon
     """
     try:
+        supabase = get_supabase_client()
+        if not supabase:
+            return False
+        
         # Vérifier si l'utilisateur existe déjà
-        user_exists = await check_user_exists(user_id)
+        response = supabase.table("users").select("*").eq("telegram_id", user_id).execute()
         
-        if user_exists:
-            # Si l'utilisateur existe déjà et qu'un parrain est fourni, 
-            # mettre à jour la relation si aucun parrain n'était défini avant
-            if referrer_id is not None:
-                existing_user = await get_user_data(user_id)
-                if existing_user and existing_user.get('referrer_id') is None:
-                    # Éviter l'auto-parrainage
-                    if referrer_id != user_id:
-                        resp = await supabase.table('users').update({
-                            'referrer_id': referrer_id
-                        }).eq('id', user_id).execute()
-                        logger.info(f"Updated user {user_id} with referrer {referrer_id}")
-                    else:
-                        logger.warning(f"Prevented self-referral for user {user_id}")
-            return True  # Utilisateur déjà existant
+        current_time = datetime.now().isoformat()
         
-        # Créer un nouvel utilisateur
-        # Éviter l'auto-parrainage
-        if referrer_id == user_id:
-            referrer_id = None
+        # Si l'utilisateur n'existe pas encore, l'ajouter
+        if not response.data:
+            user_data = {
+                "telegram_id": user_id,
+                "username": username,
+                "created_at": current_time,
+                "last_active": current_time
+            }
             
-        data = {
-            'id': user_id,
-            'username': username,
-            'referrer_id': referrer_id
-        }
+            supabase.table("users").insert(user_data).execute()
+            logger.info(f"Nouvel utilisateur enregistré: {user_id} ({username})")
+        else:
+            # Mettre à jour l'utilisateur existant
+            supabase.table("users").update({
+                "username": username, 
+                "last_active": current_time
+            }).eq("telegram_id", user_id).execute()
         
-        resp = await supabase.table('users').insert(data).execute()
-        logger.info(f"New user registered: {user_id}, referred by: {referrer_id}")
+        # Si un parrain est spécifié et que ce n'est pas l'utilisateur lui-même
+        if referrer_id and referrer_id != user_id:
+            # Vérifier si la relation de parrainage existe déjà
+            ref_response = supabase.table("referrals").select("*").eq("user_id", user_id).execute()
+            
+            if not ref_response.data:
+                # Vérifier si le parrain existe
+                referrer_response = supabase.table("users").select("*").eq("telegram_id", referrer_id).execute()
+                
+                if referrer_response.data:
+                    # Créer la relation de parrainage
+                    referral_data = {
+                        "user_id": user_id,
+                        "referrer_id": referrer_id,
+                        "created_at": current_time,
+                        "is_verified": False
+                    }
+                    
+                    supabase.table("referrals").insert(referral_data).execute()
+                    logger.info(f"Relation de parrainage créée: {referrer_id} -> {user_id}")
+                    
+                    # Envoyer en parallèle la vérification d'abonnement
+                    asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
+                    
+                    return True
+        
         return True
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement de l'utilisateur: {e}")
+        return False
+
+async def verify_and_update_referral(user_id, referrer_id):
+    """
+    Vérifie si l'utilisateur est abonné au canal et met à jour le statut de parrainage.
+    Cette fonction est appelée en arrière-plan lors de l'enregistrement d'un parrainage.
+    
+    Args:
+        user_id (int): ID Telegram de l'utilisateur
+        referrer_id (int): ID Telegram du parrain
+    """
+    try:
+        # Attendre un peu avant de vérifier (laisser le temps à l'utilisateur de s'abonner)
+        await asyncio.sleep(5)
         
+        # Vérifier l'abonnement
+        is_subscribed = await check_channel_subscription(user_id)
+        
+        if is_subscribed:
+            # Mettre à jour le statut de vérification dans la base de données
+            supabase = get_supabase_client()
+            if supabase:
+                supabase.table("referrals").update({
+                    "is_verified": True,
+                    "verified_at": datetime.now().isoformat()
+                }).eq("user_id", user_id).eq("referrer_id", referrer_id).execute()
+                
+                logger.info(f"Parrainage vérifié: {referrer_id} -> {user_id}")
+        else:
+            logger.info(f"Utilisateur {user_id} non abonné, parrainage non vérifié")
     except Exception as e:
-        logger.error(f"Error registering user: {e}")
+        logger.error(f"Erreur lors de la vérification du parrainage: {e}")
+
+async def check_channel_subscription(user_id, channel_id="@alvecapitalofficiel"):
+    """
+    Vérifie si un utilisateur est abonné à un canal Telegram spécifique.
+    
+    Args:
+        user_id (int): ID de l'utilisateur Telegram
+        channel_id (str): ID du canal à vérifier (par défaut "@alvecapitalofficiel")
+        
+    Returns:
+        bool: True si l'utilisateur est abonné, False sinon
+    """
+    try:
+        bot = Bot(token=TELEGRAM_TOKEN)
+        
+        # Vérifier si l'utilisateur est membre du canal
+        chat_member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+        
+        # Les statuts qui indiquent une adhésion active au canal
+        valid_statuses = ['creator', 'administrator', 'member']
+        
+        return chat_member.status in valid_statuses
+    
+    except TelegramError as e:
+        logger.error(f"Erreur lors de la vérification de l'abonnement: {e}")
         return False
 
-async def check_user_exists(user_id: int) -> bool:
+async def has_completed_referrals(user_id):
     """
-    Vérifie si un utilisateur existe dans la base de données.
+    Vérifie si l'utilisateur a atteint le nombre requis de parrainages.
     
     Args:
-        user_id: ID Telegram de l'utilisateur
-    
+        user_id (int): ID Telegram de l'utilisateur
+        
     Returns:
-        bool: True si l'utilisateur existe, False sinon
-    """
-    try:
-        response = await supabase.table('users').select('id').eq('id', user_id).execute()
-        return len(response.data) > 0
-    except Exception as e:
-        logger.error(f"Error checking if user exists: {e}")
-        return False
-
-async def get_user_data(user_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Récupère les données d'un utilisateur.
-    
-    Args:
-        user_id: ID Telegram de l'utilisateur
-    
-    Returns:
-        Dict or None: Données de l'utilisateur ou None si l'utilisateur n'existe pas
-    """
-    try:
-        response = await supabase.table('users').select('*').eq('id', user_id).execute()
-        if response.data and len(response.data) > 0:
-            return response.data[0]
-        return None
-    except Exception as e:
-        logger.error(f"Error getting user data: {e}")
-        return None
-
-async def count_referrals(user_id: int) -> int:
-    """
-    Compte le nombre de parrainages réalisés par un utilisateur.
-    
-    Args:
-        user_id: ID Telegram de l'utilisateur
-    
-    Returns:
-        int: Nombre de parrainages
-    """
-    try:
-        response = await supabase.table('users').select('id').eq('referrer_id', user_id).execute()
-        return len(response.data)
-    except Exception as e:
-        logger.error(f"Error counting referrals: {e}")
-        return 0
-
-async def has_completed_referrals(user_id: int) -> bool:
-    """
-    Vérifie si un utilisateur a atteint le quota de parrainages requis.
-    
-    Args:
-        user_id: ID Telegram de l'utilisateur
-    
-    Returns:
-        bool: True si le quota est atteint, False sinon
+        bool: True si l'utilisateur a complété ses parrainages, False sinon
     """
     try:
         referral_count = await count_referrals(user_id)
         return referral_count >= MAX_REFERRALS
     except Exception as e:
-        logger.error(f"Error checking if referrals completed: {e}")
+        logger.error(f"Erreur lors de la vérification des parrainages: {e}")
         return False
 
-async def get_referrer(user_id: int) -> Optional[int]:
+async def count_referrals(user_id):
     """
-    Récupère l'ID du parrain d'un utilisateur.
+    Compte le nombre de parrainages vérifiés pour un utilisateur.
     
     Args:
-        user_id: ID Telegram de l'utilisateur
-    
+        user_id (int): ID Telegram de l'utilisateur
+        
     Returns:
-        int ou None: ID du parrain ou None
+        int: Le nombre de parrainages vérifiés
     """
-    user_data = await get_user_data(user_id)
-    if user_data:
-        return user_data.get('referrer_id')
-    return None
+    try:
+        supabase = get_supabase_client()
+        if not supabase:
+            return 0
+        
+        # Récupérer uniquement les parrainages vérifiés où l'utilisateur est le parrain
+        response = supabase.table("referrals").select("count").eq("referrer_id", user_id).eq("is_verified", True).execute()
+        
+        # Retourner le nombre de parrainages
+        if response.data and isinstance(response.data, list) and len(response.data) > 0:
+            return response.data[0].get("count", 0)
+        
+        return 0
+    except Exception as e:
+        logger.error(f"Erreur lors du comptage des parrainages: {e}")
+        return 0
 
-async def get_referred_users(user_id: int) -> List[Dict[str, Any]]:
+async def get_referred_users(user_id):
     """
     Récupère la liste des utilisateurs parrainés par un utilisateur.
     
     Args:
-        user_id: ID Telegram de l'utilisateur
-    
+        user_id (int): ID Telegram de l'utilisateur
+        
     Returns:
-        List: Liste des utilisateurs parrainés
+        list: Liste des utilisateurs parrainés
     """
     try:
-        response = await supabase.table('users').select('*').eq('referrer_id', user_id).execute()
-        return response.data
+        supabase = get_supabase_client()
+        if not supabase:
+            return []
+        
+        # Jointure entre les tables referrals et users pour obtenir les détails des filleuls
+        query = """
+            SELECT u.telegram_id as id, u.username, r.created_at, r.is_verified
+            FROM referrals r
+            JOIN users u ON r.user_id = u.telegram_id
+            WHERE r.referrer_id = ?
+            ORDER BY r.created_at DESC
+        """
+        
+        # Exécuter la requête SQL
+        response = supabase.rpc("get_referred_users", {"user_id_param": user_id}).execute()
+        
+        # Retourner la liste des utilisateurs parrainés
+        if response.data:
+            return response.data
+        
+        return []
     except Exception as e:
-        logger.error(f"Error getting referred users: {e}")
+        logger.error(f"Erreur lors de la récupération des utilisateurs parrainés: {e}")
         return []
 
-async def generate_referral_link(user_id: int, bot_username: str) -> str:
+async def generate_referral_link(user_id, bot_username):
     """
     Génère un lien de parrainage pour un utilisateur.
     
     Args:
-        user_id: ID Telegram de l'utilisateur
-        bot_username: Nom d'utilisateur du bot Telegram
-    
+        user_id (int): ID Telegram de l'utilisateur
+        bot_username (str): Nom d'utilisateur du bot
+        
     Returns:
         str: Lien de parrainage
     """
     return f"https://t.me/{bot_username}?start=ref{user_id}"
+
+# Fonction pour obtenir les instructions de parrainage
+def get_referral_instructions():
+    """
+    Retourne les instructions pour qu'un parrainage soit validé.
+    
+    Returns:
+        str: Message formaté avec les instructions
+    """
+    return (
+        "*📋 Conditions pour qu'un parrainage soit validé:*\n\n"
+        "1️⃣ *L'invité doit cliquer sur votre lien de parrainage*\n"
+        "2️⃣ *L'invité doit démarrer le bot* avec la commande /start\n"
+        "3️⃣ *L'invité doit s'abonner* au canal [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n\n"
+        "_Note: Le parrainage sera automatiquement vérifié et validé une fois ces conditions remplies_"
+    )

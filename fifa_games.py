@@ -692,7 +692,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
     # Traiter de la même manière que le bot standard
     await bot_start(update, context)
-
 # Fonction principale
 def main() -> None:
     """Démarre le bot."""

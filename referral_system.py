@@ -189,6 +189,17 @@ async def check_channel_subscription(user_id, channel_id="@alvecapitalofficiel")
         bool: True si l'utilisateur est abonné, False sinon
     """
     try:
+        # Vérification préalable si l'utilisateur est admin
+        try:
+            from verification import is_admin, ADMIN_IDS, ADMIN_USERNAMES
+            # Vérification directe par ID (le plus fiable)
+            if user_id in ADMIN_IDS:
+                logger.info(f"Vérification d'abonnement contournée pour l'admin (ID: {user_id})")
+                return True
+        except ImportError:
+            # Si verification n'est pas importable, on continue normalement
+            pass
+            
         bot = Bot(token=TELEGRAM_TOKEN)
         
         # Vérifier si l'utilisateur est membre du canal
@@ -217,12 +228,20 @@ async def has_completed_referrals(user_id, username=None):
     try:
         # Vérifier d'abord si c'est un admin (importation tardive pour éviter les imports circulaires)
         try:
-            from verification import is_admin
-            if await is_admin(user_id, username):
-                logger.info(f"Vérification de parrainage contournée pour l'administrateur {username} (ID: {user_id})")
+            from verification import is_admin, ADMIN_IDS, ADMIN_USERNAMES
+            
+            # Vérification directe par ID (le plus fiable)
+            if user_id in ADMIN_IDS:
+                logger.info(f"Vérification de parrainage contournée pour l'admin (ID: {user_id})")
                 return True
+                
+            # Vérification par nom d'utilisateur (backup)
+            if username and username.lower() in [admin.lower() for admin in ADMIN_USERNAMES]:
+                logger.info(f"Vérification de parrainage contournée pour l'admin {username}")
+                return True
+                
         except ImportError:
-            # Si le module n'est pas disponible, continuer normalement
+            # Si verification n'est pas importable, continue normalement
             pass
         
         referral_count = await count_referrals(user_id)

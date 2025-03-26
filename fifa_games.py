@@ -677,6 +677,7 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await verify_subscription(update.message, user_id, username, context)
 
 # Fonction principale pour démarrer le bot
+# Fonction principale pour démarrer le bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Point d'entrée personnalisé depuis fifa_games.py"""
     # Sauvegarder l'ID utilisateur dans le contexte
@@ -689,8 +690,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     admin_status = is_admin(user_id, username)
     if admin_status:
         logger.info(f"Commande /start par l'administrateur {username} (ID: {user_id})")
-        
-    # Traiter de la même manière que le bot standard
+        # Pour les admins, afficher directement le menu des jeux
+        await show_games_menu(update.message, context)
+        return
+    
+    # Traiter de la même manière que le bot standard pour les non-admins
     await bot_start(update, context)
 # Fonction principale
 def main() -> None:

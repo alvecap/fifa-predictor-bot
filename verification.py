@@ -15,9 +15,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Liste des administrateurs (accès complet sans vérifications)
-# Liste des administrateurs (accès complet sans vérifications)
 ADMIN_USERNAMES = ["alve08"]  # Noms d'utilisateur des admins
-ADMIN_IDS = [6054768666]  # Remplacez par votre ID Telegram
+ADMIN_IDS = [6054768666]  # ID des administrateurs
 
 async def is_admin(user_id: int, username: str = None) -> bool:
     """Vérifie si l'utilisateur est un administrateur."""
@@ -34,7 +33,14 @@ async def is_admin(user_id: int, username: str = None) -> bool:
     return False
 
 # Animation de vérification d'abonnement
-async def animated_subscription_check(message, user_id, username, context=None, edit=False) -> bool:
+async def animated_subscription_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Gère la commande /check et effectue une vérification d'abonnement animée"""
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    
+    return await _animated_subscription_check(update.message, user_id, username, context)
+
+async def _animated_subscription_check(message, user_id, username, context=None, edit=False) -> bool:
     """Effectue une vérification d'abonnement avec animation et retourne le résultat."""
     # Vérifier d'abord si c'est un admin
     if await is_admin(user_id, username):
@@ -106,7 +112,7 @@ async def animated_subscription_check(message, user_id, username, context=None, 
         
         # Lancer la vérification du parrainage si le contexte est fourni
         if context:
-            await animated_referral_check(message, user_id, username, context)
+            await animated_referral_check(update.message if hasattr(update, 'message') else message, user_id, username, context)
             
         return True
     else:
@@ -205,8 +211,8 @@ async def animated_referral_check(message, user_id, username, context=None, edit
         await msg.edit_text(frame, parse_mode='Markdown')
         await asyncio.sleep(0.3)
     
-    # Effectuer la vérification
-    has_completed = await has_completed_referrals(user_id)
+    # Effectuer la vérification (fonction modifiée pour inclure le nom d'utilisateur)
+    has_completed = await has_completed_referrals(user_id, username)
     
     if has_completed:
         # Animation de succès - version accélérée
@@ -224,6 +230,7 @@ async def animated_referral_check(message, user_id, username, context=None, edit
             await msg.edit_text(frame, parse_mode='Markdown')
             await asyncio.sleep(0.1)
         
+        # Message final de succès
         # Message final de succès
         await msg.edit_text(
             "✅ *Parrainage complété!*\n\n"
@@ -315,17 +322,17 @@ async def verify_all_requirements(user_id, username, message, context=None, edit
     """Vérifie toutes les conditions d'accès (abonnement + parrainage)."""
     # Vérifier d'abord si c'est un admin
     if await is_admin(user_id, username):
+        logger.info(f"Vérification contournée pour l'administrateur {username} (ID: {user_id})")
         return True
     
-    # Vérifier l'abonnement
     # Vérifier l'abonnement
     is_subscribed = await check_user_subscription(user_id)
     if not is_subscribed:
         await send_subscription_required(message)
         return False
     
-    # Vérifier le parrainage
-    has_completed = await has_completed_referrals(user_id)
+    # Vérifier le parrainage (passer le nom d'utilisateur en paramètre)
+    has_completed = await has_completed_referrals(user_id, username)
     if not has_completed:
         await send_referral_required(message)
         return False
@@ -402,7 +409,13 @@ async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, ca
     user_id = query.from_user.id
     username = query.from_user.username
     
-    # Vérification rapide des conditions
+    # Vérification rapide si c'est un admin
+    if await is_admin(user_id, username):
+        # Si c'est un admin, exécuter directement la fonction callback
+        await callback_function(update, context)
+        return
+        
+    # Vérification des autres conditions pour les non-admin
     if await verify_all_requirements(user_id, username, query.message, context, edit=True):
         # Si tout est validé, exécute la fonction callback
         await callback_function(update, context)

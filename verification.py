@@ -305,10 +305,10 @@ async def send_referral_required(message) -> None:
 async def verify_all_requirements(user_id, username, message, context=None, edit=False) -> bool:
     """Vérifie toutes les conditions d'accès (abonnement + parrainage)."""
     # Vérifier d'abord si c'est un admin
-    # Vérifier d'abord si c'est un admin
     if await is_admin(user_id, username):
         return True
     
+    # Vérifier l'abonnement
     # Vérifier l'abonnement
     is_subscribed = await check_user_subscription(user_id)
     if not is_subscribed:
@@ -337,17 +337,17 @@ async def verify_before_game(update: Update, context: ContextTypes.DEFAULT_TYPE,
 # Affichage du menu principal des jeux
 async def show_games_menu(message: Message, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Affiche le menu principal avec tous les jeux disponibles."""
-    # Texte du menu
+    # Texte du menu amélioré
     menu_text = (
         "🎮 *FIFA GAMES - Menu Principal* 🎮\n\n"
         "Choisissez un jeu pour obtenir des prédictions :\n\n"
         "🏆 *FIFA 4x4 Predictor*\n"
-        "_Prédictions précises basées sur des statistiques réelles de matchs FIFA 4x4_\n\n"
+        "_Prédictions précises basées sur des statistiques réelles et analyses de matchs_\n\n"
         "🍎 *Apple of Fortune*\n"
-        "_Trouvez la bonne pomme et multipliez vos chances de gagner_\n\n"
+        "_Trouvez la bonne pomme grâce à notre système prédictif avancé_\n\n"
         "🃏 *Baccarat*\n"
-        "_Anticipez le gagnant entre le Joueur et le Banquier_\n\n"
-        "⚡ *Plus de jeux bientôt disponibles!* ⚡"
+        "_Anticipez le gagnant avec notre technologie d'analyse de tendances_\n\n"
+        "⚡ *Plus de jeux en préparation* ⚡"
     )
     
     # Boutons pour accéder aux différents jeux

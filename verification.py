@@ -15,13 +15,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Liste des administrateurs (accès complet sans vérifications)
-ADMIN_USERNAMES = ["alve08"]  # Ajoutez d'autres admins si nécessaire
+# Liste des administrateurs (accès complet sans vérifications)
+ADMIN_USERNAMES = ["alve08"]  # Noms d'utilisateur des admins
+ADMIN_IDS = [6054768666]  # Remplacez par votre ID Telegram
 
-async def is_admin(user_id: int, username: str) -> bool:
+async def is_admin(user_id: int, username: str = None) -> bool:
     """Vérifie si l'utilisateur est un administrateur."""
+    # Vérification par ID (plus fiable)
+    if user_id in ADMIN_IDS:
+        logger.info(f"Accès administrateur accordé à l'utilisateur ID: {user_id}")
+        return True
+    
+    # Vérification par nom d'utilisateur (backup)
     if username and username.lower() in [admin.lower() for admin in ADMIN_USERNAMES]:
         logger.info(f"Accès administrateur accordé à l'utilisateur {username} (ID: {user_id})")
         return True
+    
     return False
 
 # Animation de vérification d'abonnement

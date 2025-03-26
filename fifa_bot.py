@@ -293,15 +293,16 @@ async def animated_referral_check(message, user_id, context=None, edit=False) ->
     
     # Animation plus longue (au moins 3 secondes total)
     # Animation plus longue (au moins 3 secondes total)
-   check_frames = [
-       "📊 *Recherche de vos filleuls...*",
-       "👥 *Comptage des parrainages...*",
-       "📈 *Vérification des conditions...*"
-   ]
-   
-   for frame in check_frames:
-       await msg.edit_text(frame, parse_mode='Markdown')
-       await asyncio.sleep(0.7)  # Plus lent pour atteindre 3 secondes minimum
+   # Animation plus longue (au moins 3 secondes total)
+    check_frames = [
+        "📊 *Recherche de vos filleuls...*",
+        "👥 *Comptage des parrainages...*",
+        "📈 *Vérification des conditions...*"
+    ]
+    
+    for frame in check_frames:
+        await msg.edit_text(frame, parse_mode='Markdown')
+        await asyncio.sleep(0.7)  # Plus lent pour atteindre 3 secondes minimum  # Plus lent pour atteindre 3 secondes minimum
    
    # Effectuer la vérification
    has_completed = await has_completed_referrals(user_id)

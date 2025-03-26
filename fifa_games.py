@@ -502,3 +502,86 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         return BACCARAT_INPUT
+        # Gestionnaire des messages pour les différents jeux
+async def handle_game_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
+    """Traite les messages spécifiques aux jeux."""
+    # Vérifier si c'est un admin d'abord
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    
+    # Faciliter l'accès aux admins sans vérifications
+    admin_status = await is_admin(user_id, username)
+    
+    # Vérifier si c'est un message pour Baccarat (tour #)
+    if context.user_data.get("awaiting_baccarat_tour", False):
+        return await handle_baccarat_tour_input(update, context)
+    
+    # Vérifier si c'est un message pour FIFA (cotes équipe 1)
+    if context.user_data.get("awaiting_odds_team1", False):
+        return await handle_odds_team1_input(update, context)
+    
+    # Vérifier si c'est un message pour FIFA (cotes équipe 2)
+    if context.user_data.get("awaiting_odds_team2", False):
+        return await handle_odds_team2_input(update, context)
+    
+    # Sinon, traiter comme un message normal
+    return await handle_message(update, context)
+
+# Fonction principale pour démarrer le bot
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Point d'entrée personnalisé depuis fifa_games.py"""
+    await bot_start(update, context)
+
+# Fonction principale
+def main() -> None:
+    """Démarre le bot."""
+    try:
+        # Créer l'application
+        application = Application.builder().token(TELEGRAM_TOKEN).build()
+
+        # Ajouter les gestionnaires de commandes
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("games", show_games_menu))
+        application.add_handler(CommandHandler("check", animated_subscription_check))
+        application.add_handler(CommandHandler("referral", referral_command))
+        
+        # Gestionnaire de conversation pour Baccarat
+        baccarat_conv_handler = ConversationHandler(
+            entry_points=[
+                CallbackQueryHandler(handle_baccarat_callback, pattern="^baccarat_")
+            ],
+            states={
+                BACCARAT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_baccarat_tour_input)]
+            },
+            fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+        )
+        application.add_handler(baccarat_conv_handler)
+        
+        # Ajouter le gestionnaire pour les clics sur les boutons
+        # Wrapping callback_query_handler avec verify_callback pour les callbacks spécifiques
+        application.add_handler(CallbackQueryHandler(
+            lambda u, c: verify_callback(u, c, handle_fifa_callback), 
+            pattern="^fifa_"
+        ))
+        
+        # Gestionnaire pour les callbacks non-spécifiques
+        application.add_handler(CallbackQueryHandler(button_callback))
+        
+        # Ajouter le gestionnaire pour les messages normaux
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages))
+        
+        # Ajouter le gestionnaire d'erreurs
+        application.add_error_handler(error_handler)
+
+        # Démarrer le bot
+        logger.info(f"Bot démarré avec le token: {TELEGRAM_TOKEN[:5]}...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
+    except Exception as e:
+        logger.critical(f"ERREUR CRITIQUE lors du démarrage du bot: {e}")
+        import traceback
+        logger.critical(traceback.format_exc())
+
+if __name__ == '__main__':
+    main()

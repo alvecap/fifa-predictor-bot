@@ -1,34 +1,12 @@
 import logging
-import re
 import asyncio
-from typing import Optional, Callable, Any
+import random
+from typing import Optional, List, Dict, Any
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ConversationHandler,
-    filters,
-    ContextTypes
-)
+from telegram.ext import ContextTypes, ConversationHandler
 
-from config import TELEGRAM_TOKEN
-from verification import (
-    animated_subscription_check, animated_referral_check,
-    send_subscription_required, send_referral_required,
-    verify_all_requirements, verify_before_game, show_games_menu,
-    verify_callback, is_admin
-)
-from referral_system import (
-    register_user, generate_referral_link,
-    count_referrals, get_referred_users, MAX_REFERRALS, get_referral_instructions
-)
-
-# Import des modules de jeux
-from games.fifa_game import start_fifa_game, handle_fifa_callback
-from games.apple_game import start_apple_game, handle_apple_callback
-from games.baccarat_game import start_baccarat_game, handle_baccarat_callback
+from database import get_all_teams, save_prediction_log
+from predictor import MatchPredictor, format_prediction_message
 
 # Configuration du logging
 logging.basicConfig(
@@ -37,375 +15,486 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# États de conversation
-VERIFY_SUBSCRIPTION = 1
-GAME_SELECTION = 2
-BACCARAT_INPUT = 3
+# Initialisation du prédicteur
+predictor = MatchPredictor()
 
-# Fonctions de base
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Envoie un message quand la commande /start est envoyée."""
-    user = update.effective_user
-    user_id = user.id
-    username = user.username
-    context.user_data["username"] = username
-    
-    # Vérifier si l'utilisateur vient d'un lien de parrainage
-    referrer_id = None
-    if context.args and len(context.args) > 0 and context.args[0].startswith('ref'):
-        try:
-            referrer_id = int(context.args[0][3:])  # Extraire l'ID du parrain
-            logger.info(f"User {user_id} came from referral link of user {referrer_id}")
-        except (ValueError, IndexError):
-            referrer_id = None
-    
-    # Enregistrer l'utilisateur dans la base de données avec le parrain si applicable
-    await register_user(user_id, username, referrer_id)
-    
-    # Message de bienvenue personnalisé
-    welcome_text = (
-        "🎮 *Bienvenue sur FIFA GAMES* 🎮\n\n"
-        "Préparez-vous à vivre l'expérience ultime de prédiction de jeux FIFA et casino virtuel !\n\n"
-        "*Nos jeux disponibles :*\n\n"
-        "🏆 *FIFA 4x4 Predictor* \n"
-        "_Prédictions précises basées sur des données historiques et analyses statistiques_\n\n"
-        "🍎 *Apple of Fortune* \n"
-        "_Trouvez la bonne pomme grâce à notre système prédictif avancé_\n\n"
-        "🃏 *Baccarat* \n"
-        "_Anticipez le gagnant avec notre technologie d'analyse de tendances_\n\n"
-        "⚡ *Nouveaux jeux en préparation* ⚡\n"
-        "_Restez connectés pour découvrir nos futures innovations_\n\n"
-        "⚠️ *Conditions d'accès* ⚠️\n"
-        "*1.* Être abonné à notre canal [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n"
-        "*2.* Parrainer 1 personne pour débloquer l'accès complet\n\n"
-        "Commencez l'aventure en vérifiant votre abonnement ci-dessous 👇"
-    )
-    
-    # Vérifier si l'utilisateur est un administrateur
-    is_admin_user = await is_admin(user_id, username)
-    
-    # Créer les boutons
-    buttons = [
-        [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")],
-        [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-    ]
-    
-    # Ajouter le bouton de parrainage si nécessaire
-    if not is_admin_user:  # Les admins n'ont pas besoin de parrainer
-        buttons.append([InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")])
-    
-    reply_markup = InlineKeyboardMarkup(buttons)
-    
-    await update.message.reply_text(
-        welcome_text,
-        parse_mode='Markdown',
-        reply_markup=reply_markup,
-        disable_web_page_preview=True
-    )
+# États de conversation pour le jeu FIFA
+TEAM_SELECTION = 1
+ODDS_INPUT_TEAM1 = 2
+ODDS_INPUT_TEAM2 = 3
 
-    # Pour les administrateurs, afficher directement le menu des jeux
-    if is_admin_user:
-        await update.message.reply_text(
-            "🔑 *Accès administrateur détecté*\n\n"
-            "Vous avez un accès complet à toutes les fonctionnalités.",
-            parse_mode='Markdown'
-        )
-        await show_games_menu(update.message, context)
+# Constantes pour la pagination des équipes
+TEAMS_PER_PAGE = 8
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Envoie un message d'aide quand la commande /help est envoyée."""
-    user_id = update.effective_user.id
-    username = update.effective_user.username
-    
-    # Vérifier les conditions d'accès
-    if not await verify_all_requirements(user_id, username, update.effective_message, context):
-        return
-    
-    help_text = (
-        "*🎮 FIFA GAMES - Aide*\n\n"
-        "*Commandes disponibles:*\n"
-        "• `/start` - Démarrer le bot\n"
-        "• `/help` - Afficher ce message d'aide\n"
-        "• `/games` - Afficher le menu des jeux\n"
-        "• `/referral` - Gérer vos parrainages\n\n"
-        "*Jeux disponibles:*\n\n"
-        "• 🏆 *FIFA 4x4 Predictor*\n"
-        "_Prédictions basées sur des statistiques réelles et données historiques_\n\n"
-        "• 🍎 *Apple of Fortune*\n" 
-        "_Système avancé de prédiction de position connecté à notre API_\n\n"
-        "• 🃏 *Baccarat*\n"
-        "_Analyses de tendances pour anticiper les résultats avec précision_\n\n"
-        "Pour plus d'informations sur chaque jeu, sélectionnez-le dans le menu principal."
-    )
-    
-    await update.message.reply_text(help_text, parse_mode='Markdown')
-
-async def games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Affiche le menu des jeux disponibles."""
-    user_id = update.effective_user.id
-    username = update.effective_user.username
-    
-    # Vérifier les conditions d'accès
-    if await verify_all_requirements(user_id, username, update.effective_message, context):
-        # Afficher le menu des jeux
-        await show_games_menu(update.effective_message, context)
-
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gère les erreurs."""
-    logger.error(f"Une erreur est survenue: {context.error}")
-    
-    if update and update.effective_message:
-        try:
-            await update.effective_message.reply_text(
-                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur."
-            )
-        except Exception as e:
-            logger.error(f"Erreur lors de l'envoi du message d'erreur: {e}")
-
-# Commande pour vérifier l'abonnement au canal
-async def check_subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Vérifie si l'utilisateur est abonné au canal @alvecapitalofficiel."""
-    user_id = update.effective_user.id
-    username = update.effective_user.username
-    context.user_data["user_id"] = user_id
-    
-    # Utiliser l'animation de vérification
-    await animated_subscription_check(update.message, user_id, username, context)
-
-# Commande pour gérer les parrainages
-async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gère les parrainages de l'utilisateur."""
-    user_id = update.effective_user.id
-    username = update.effective_user.username
-    
-    # Vérifier si c'est un admin
-    if await is_admin(user_id, username):
-        await update.message.reply_text(
-            "🔑 *Mode Administrateur*\n\n"
-            "Vous n'avez pas besoin de gérer les parrainages en tant qu'administrateur.",
-            parse_mode='Markdown'
-        )
-        return
-    
-    # Vérifier l'abonnement d'abord
-    is_subscribed = await verify_all_requirements(user_id, username, update.effective_message, context=None)
-    if not is_subscribed:
-        return
-    
-    # S'assurer que l'utilisateur est enregistré
-    await register_user(user_id, username)
-    
-    # Obtenir les statistiques de parrainage
-    referral_count = await count_referrals(user_id)
-    has_completed = referral_count >= MAX_REFERRALS
-    referred_users = await get_referred_users(user_id)
-    
-    # Générer un lien de parrainage
-    bot_info = await context.bot.get_me()
-    bot_username = bot_info.username
-    referral_link = await generate_referral_link(user_id, bot_username)
-    
-    # Créer le message
-    message_text = "👥 *Système de Parrainage FIFA GAMES*\n\n"
-    
-    if has_completed:
-        message_text += "✅ *Statut: Parrainage complété*\n"
-        message_text += f"Vous avez parrainé {referral_count}/{MAX_REFERRALS} personne(s) requise(s).\n"
-        message_text += "Toutes les fonctionnalités sont débloquées!\n\n"
-    else:
-        message_text += "⏳ *Statut: Parrainage en cours*\n"
-        message_text += f"Progression: {referral_count}/{MAX_REFERRALS} personne(s) parrainée(s).\n"
-        message_text += f"Parrainez encore {MAX_REFERRALS - referral_count} personne(s) pour débloquer toutes les fonctionnalités.\n\n"
-    
-    message_text += "*Votre lien de parrainage:*\n"
-    message_text += f"`{referral_link}`\n\n"
-    
-    # Ajouter les instructions de parrainage
-    message_text += "Pour parrainer un ami:\n"
-    message_text += "*1.* Envoyez votre lien à votre ami\n"
-    message_text += "*2.* Votre ami doit cliquer sur le lien\n"
-    message_text += "*3.* L'ami doit redémarrer le bot pour activer le parrainage\n\n"
-    
-    # Ajouter la liste des utilisateurs parrainés
-    if referred_users:
-        message_text += "\n*Utilisateurs que vous avez parrainés:*\n"
-        for user in referred_users:
-            user_username = user.get('username', 'Inconnu')
-            is_verified = "✅" if user.get('is_verified', False) else "⏳"
-            message_text += f"• {is_verified} {user_username}\n"
-    
-    # Créer les boutons
-    buttons = [
-        [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")]
-    ]
-    
-    if not has_completed:
-        buttons.append([InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")])
-    
-    buttons.append([InlineKeyboardButton("🎮 Menu des jeux", callback_data="show_games")])
-    
-    reply_markup = InlineKeyboardMarkup(buttons)
-    
-    await update.message.reply_text(
-        message_text,
-        parse_mode='Markdown',
-        reply_markup=reply_markup,
-        disable_web_page_preview=True
-    )
-
-# Gestionnaire des boutons de callback
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
-    """Gère les clics sur les boutons inline."""
+# Fonction principale pour le jeu FIFA 4x4
+async def start_fifa_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Lance le jeu FIFA 4x4 Predictor."""
     query = update.callback_query
-    await query.answer()
     
-    # Récupérer les données utilisateur
-    user_id = query.from_user.id
-    username = query.from_user.username
-    context.user_data["user_id"] = user_id
-    context.user_data["username"] = username
+    # Message introductif
+    intro_text = (
+        "🏆 *FIFA 4x4 PREDICTOR* 🏆\n\n"
+        "Obtenez des prédictions précises basées sur des statistiques réelles de matchs FIFA 4x4.\n\n"
+        "Pour commencer, sélectionnez les équipes qui s'affrontent et indiquez les cotes actuelles."
+    )
     
-    # Traiter les différents types de callback
-    if query.data == "verify_subscription":
-        # Utiliser l'animation de vérification avec le contexte
-        await animated_subscription_check(query.message, user_id, username, context, edit=True)
+    # Bouton pour lancer la sélection d'équipes
+    keyboard = [
+        [InlineKeyboardButton("👉 Sélectionner les équipes", callback_data="fifa_select_teams")],
+        [InlineKeyboardButton("🎮 Retour au menu", callback_data="show_games")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    elif query.data == "verify_referral":
-        # Vérifier d'abord l'abonnement
-        is_subscribed = await verify_all_requirements(user_id, username, query.message, context=None)
-        if not is_subscribed:
-            return
-        
-        # Vérifier le parrainage avec animation
-        await animated_referral_check(query.message, user_id, username, context, edit=True)
-    
-    elif query.data == "get_referral_link":
-        # Vérifier l'abonnement avant de donner le lien
-        is_subscribed = await verify_all_requirements(user_id, username, query.message, context=None)
-        if not is_subscribed:
-            return
-        
-        # Générer et afficher un lien de parrainage
-        bot_info = await context.bot.get_me()
-        bot_username = bot_info.username
-        referral_link = await generate_referral_link(user_id, bot_username)
-        
-        # Obtenir le nombre actuel de parrainages
-        referral_count = await count_referrals(user_id)
-        
-        # Créer les boutons
-        keyboard = [
-            [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")],
-            [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        # Message avec les instructions de parrainage
-        message_text = f"🔗 *Votre lien de parrainage:*\n\n`{referral_link}`\n\n"
-        message_text += f"_Progression: {referral_count}/{MAX_REFERRALS} parrainage(s)_\n\n"
-        message_text += "Pour parrainer un ami:\n"
-        message_text += "*1.* Envoyez votre lien à votre ami\n"
-        message_text += "*2.* Votre ami doit cliquer sur le lien\n"
-        message_text += "*3.* L'ami doit redémarrer le bot pour activer le parrainage"
-        
-        await query.edit_message_text(
-            message_text,
-            parse_mode='Markdown',
-            reply_markup=reply_markup,
-            disable_web_page_preview=True
-        )
-    
-    elif query.data == "copy_referral_link":
-        # Telegram gère automatiquement la copie
-        await query.answer("Lien copié dans le presse-papier!")
-    
-    elif query.data == "show_games":
-        # Vérifier les conditions d'accès
-        if await verify_all_requirements(user_id, username, query.message, context):
-            # Afficher le menu des jeux
-            await show_games_menu(query.message, context)
-    
-    # Gestion des redirections vers les différents jeux
-    elif query.data == "game_fifa":
-        # Redirection vers le jeu FIFA 4x4
-        await verify_callback(update, context, start_fifa_game)
-    
-    elif query.data == "game_apple":
-        # Redirection vers le jeu Apple of Fortune
-        await verify_callback(update, context, start_apple_game)
-    
-    elif query.data == "game_baccarat":
-        # Redirection vers le jeu Baccarat
-        await verify_callback(update, context, start_baccarat_game)
-    
-    # Gestion des callbacks spécifiques à chaque jeu
-    elif query.data.startswith("fifa_"):
-        # Callback spécifique au jeu FIFA 4x4
-        await verify_callback(update, context, handle_fifa_callback)
-    
-    elif query.data.startswith("apple_"):
-        # Callback spécifique au jeu Apple of Fortune
-        await verify_callback(update, context, handle_apple_callback)
-    
-    elif query.data.startswith("baccarat_"):
-        # Callback spécifique au jeu Baccarat
-        await verify_callback(update, context, handle_baccarat_callback)
-    
-    return None
-
-# Gérer les messages directs
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
-    """Répond aux messages qui ne sont pas des commandes."""
-    # Vérifier si c'est un message pour Baccarat (tour #)
-    if context.user_data.get("awaiting_baccarat_tour", False):
-        from games.baccarat_game import handle_baccarat_tour_input
-        return await handle_baccarat_tour_input(update, context)
-    
-    # Vérifier l'abonnement avant de traiter
-    user_id = update.effective_user.id
-    username = update.effective_user.username
-    
-    # Message par défaut informant l'utilisateur des commandes disponibles
-    await update.message.reply_text(
-        "👋 *Bienvenue sur FIFA GAMES!*\n\n"
-        "Utilisez les commandes suivantes pour naviguer:\n"
-        "• `/start` - Commencer ou redémarrer le bot\n"
-        "• `/games` - Afficher le menu des jeux\n"
-        "• `/help` - Voir toutes les commandes disponibles",
+    # Éditer le message pour afficher l'introduction du jeu
+    await query.edit_message_text(
+        intro_text,
+        reply_markup=reply_markup,
         parse_mode='Markdown'
     )
 
-# Fonction principale
-def main() -> None:
-    """Démarre le bot."""
+# Gestionnaire des callbacks spécifiques à FIFA 4x4
+async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
+    """Gère les callbacks du jeu FIFA 4x4."""
+    query = update.callback_query
+    callback_data = query.data
+    
+    if callback_data == "fifa_select_teams":
+        # Lancer la sélection des équipes
+        context.user_data["selecting_team1"] = True
+        await start_team_selection(query.message, context, edit=True)
+    
+    elif callback_data.startswith("teams_page_"):
+        # Gestion de la pagination pour les équipes
+        page = int(callback_data.split("_")[-1])
+        is_team1 = context.user_data.get("selecting_team1", True)
+        await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
+    
+    elif callback_data.startswith("select_team1_"):
+        # Extraire le nom de l'équipe 1
+        team1 = callback_data.replace("select_team1_", "")
+        context.user_data["team1"] = team1
+        context.user_data["selecting_team1"] = False
+        
+        # Animation de sélection
+        anim_frames = [
+            f"✅ *{team1}* sélectionné!",
+            f"✅ *{team1}* ✅",
+            f"🎯 *{team1}* sélectionné!"
+        ]
+        
+        for frame in anim_frames:
+            await query.edit_message_text(frame, parse_mode='Markdown')
+            await asyncio.sleep(0.3)
+        
+        # Puis passer à la sélection de l'équipe 2
+        await start_team2_selection(query.message, context, edit=True)
+    
+    elif callback_data.startswith("select_team2_"):
+        # Extraire le nom de l'équipe 2
+        team2 = callback_data.replace("select_team2_", "")
+        team1 = context.user_data.get("team1", "")
+        
+        if not team1:
+            await query.edit_message_text(
+                "❌ *Erreur de sélection*\n\n"
+                "Veuillez recommencer la procédure de sélection des équipes.",
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Sauvegarder l'équipe 2
+        context.user_data["team2"] = team2
+        
+        # Animation de sélection
+        anim_frames = [
+            f"✅ *{team2}* sélectionné!",
+            f"✅ *{team2}* ✅",
+            f"🎯 *{team2}* sélectionné!"
+        ]
+        
+        for frame in anim_frames:
+            await query.edit_message_text(frame, parse_mode='Markdown')
+            await asyncio.sleep(0.3)
+        
+        # Demander la première cote
+        await query.edit_message_text(
+            f"💰 *Saisie des cotes (obligatoire)*\n\n"
+            f"Match: *{team1}* vs *{team2}*\n\n"
+            f"Veuillez saisir la cote pour *{team1}*\n\n"
+            f"_Exemple: 1.85_",
+            parse_mode='Markdown'
+        )
+        
+        # Passer en mode conversation pour recevoir les cotes
+        context.user_data["awaiting_odds_team1"] = True
+        context.user_data["odds_for_match"] = f"{team1} vs {team2}"
+        
+        return ODDS_INPUT_TEAM1
+    
+    elif callback_data == "fifa_new_prediction":
+        # Relancer une nouvelle prédiction
+        await start_fifa_game(update, context)
+    
+    return None
+
+# Fonction pour démarrer la sélection des équipes (première équipe)
+async def start_team_selection(message, context, edit=False, page=0) -> None:
+    """Affiche la première page de sélection d'équipe."""
     try:
-        # Créer l'application
-        application = Application.builder().token(TELEGRAM_TOKEN).build()
-
-        # Ajouter les gestionnaires de commandes
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("games", games_command))
-        application.add_handler(CommandHandler("check", check_subscription_command))
-        application.add_handler(CommandHandler("referral", referral_command))
-        
-        # Ajouter le gestionnaire pour les clics sur les boutons
-        application.add_handler(CallbackQueryHandler(button_callback))
-        
-        # Ajouter le gestionnaire pour les messages normaux
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        
-        # Ajouter le gestionnaire d'erreurs
-        application.add_error_handler(error_handler)
-
-        # Démarrer le bot
-        logger.info(f"Bot démarré avec le token: {TELEGRAM_TOKEN[:5]}...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-        
+        context.user_data["selecting_team1"] = True
+        await show_teams_page(message, context, page, edit, is_team1=True)
     except Exception as e:
-        logger.critical(f"ERREUR CRITIQUE lors du démarrage du bot: {e}")
-        import traceback
-        logger.critical(traceback.format_exc())
+        logger.error(f"Erreur lors du démarrage de la sélection d'équipes: {e}")
+        if edit:
+            await message.edit_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
+        else:
+            await message.reply_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
 
-if __name__ == '__main__':
-    main()
+# Fonction pour afficher une page d'équipes
+async def show_teams_page(message, context, page=0, edit=False, is_team1=True) -> None:
+    """Affiche une page de la liste des équipes."""
+    teams = get_all_teams()
+    
+    # Calculer le nombre total de pages
+    total_pages = (len(teams) + TEAMS_PER_PAGE - 1) // TEAMS_PER_PAGE
+    
+    # S'assurer que la page est valide
+    page = max(0, min(page, total_pages - 1))
+    
+    # Obtenir les équipes pour cette page
+    start_idx = page * TEAMS_PER_PAGE
+    end_idx = min(start_idx + TEAMS_PER_PAGE, len(teams))
+    page_teams = teams[start_idx:end_idx]
+    
+    # Créer les boutons pour les équipes
+    team_buttons = []
+    row = []
+    
+    callback_prefix = "select_team1_" if is_team1 else "select_team2_"
+    
+    for i, team in enumerate(page_teams):
+        row.append(InlineKeyboardButton(team, callback_data=f"{callback_prefix}{team}"))
+        if len(row) == 2 or i == len(page_teams) - 1:
+            team_buttons.append(row)
+            row = []
+    
+    # Ajouter les boutons de navigation
+    nav_buttons = []
+    
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️ Précédent", callback_data=f"teams_page_{page-1}"))
+    
+    if page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton("Suivant ▶️", callback_data=f"teams_page_{page+1}"))
+    
+    if nav_buttons:
+        team_buttons.append(nav_buttons)
+    
+    # Ajouter bouton pour revenir en arrière si nécessaire
+    if not is_team1:
+        team_buttons.append([InlineKeyboardButton("◀️ Retour", callback_data="fifa_select_teams")])
+    else:
+        team_buttons.append([InlineKeyboardButton("🎮 Menu principal", callback_data="show_games")])
+    
+    reply_markup = InlineKeyboardMarkup(team_buttons)
+    
+    # Texte du message
+    team_type = "première" if is_team1 else "deuxième"
+    text = (
+        f"🏆 *Sélection des équipes* (Page {page+1}/{total_pages})\n\n"
+        f"Veuillez sélectionner la *{team_type} équipe* pour votre prédiction:"
+    )
+    
+    try:
+        if edit:
+            await message.edit_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    except Exception as e:
+        logger.error(f"Erreur lors de l'affichage des équipes: {e}")
+        if edit:
+            await message.edit_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
+        else:
+            await message.reply_text(
+                "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
+                parse_mode='Markdown'
+            )
+
+# Fonction pour démarrer la sélection de la deuxième équipe
+async def start_team2_selection(message, context, edit=False, page=0) -> None:
+    """Affiche les options de sélection pour la deuxième équipe."""
+    team1 = context.user_data.get("team1", "")
+    
+    if not team1:
+        if edit:
+            await message.edit_text(
+                "❌ *Erreur*\n\nVeuillez d'abord sélectionner la première équipe.",
+                parse_mode='Markdown'
+            )
+        else:
+            await message.reply_text(
+                "❌ *Erreur*\n\nVeuillez d'abord sélectionner la première équipe.",
+                parse_mode='Markdown'
+            )
+        return
+    
+    # Afficher la page de sélection de la deuxième équipe
+    await show_teams_page(message, context, page, edit, is_team1=False)
+
+# Gestionnaire pour la saisie de la cote de l'équipe 1
+async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Gère la saisie de la cote pour la première équipe."""
+    if not context.user_data.get("awaiting_odds_team1", False):
+        return ConversationHandler.END
+    
+    # Importer la vérification d'abonnement et de parrainage de manière "tardive"
+    from database import check_user_subscription
+    from referral_system import has_completed_referrals
+    from verification import send_subscription_required, send_referral_required
+    
+    # Vérifier l'abonnement
+    user_id = update.effective_user.id
+    is_subscribed = await check_user_subscription(user_id)
+    
+    if not is_subscribed:
+        await send_subscription_required(update.message)
+        return ConversationHandler.END
+    
+    # Vérifier le parrainage
+    has_completed_status = await has_completed_referrals(user_id)
+    if not has_completed_status:
+        await send_referral_required(update.message)
+        return ConversationHandler.END
+    
+    user_input = update.message.text.strip()
+    team1 = context.user_data.get("team1", "")
+    team2 = context.user_data.get("team2", "")
+    
+    # Extraire la cote
+    try:
+        odds1 = float(user_input.replace(",", "."))
+        
+        # Vérifier que la cote est valide
+        if odds1 < 1.01:
+            await update.message.reply_text(
+                "❌ *Valeur de cote invalide*\n\n"
+                "La cote doit être supérieure à 1.01.",
+                parse_mode='Markdown'
+            )
+            return ODDS_INPUT_TEAM1
+        
+        # Sauvegarder la cote
+        context.user_data["odds1"] = odds1
+        context.user_data["awaiting_odds_team1"] = False
+        
+        # Animation de validation de la cote
+        loading_message = await update.message.reply_text(
+            f"✅ Cote de *{team1}* enregistrée: *{odds1}*",
+            parse_mode='Markdown'
+        )
+        
+        # Demander la cote de l'équipe 2
+        await asyncio.sleep(0.5)
+        await loading_message.edit_text(
+            f"💰 *Saisie des cotes (obligatoire)*\n\n"
+            f"Match: *{team1}* vs *{team2}*\n\n"
+            f"Veuillez maintenant saisir la cote pour *{team2}*\n\n"
+            f"_Exemple: 2.35_",
+            parse_mode='Markdown'
+        )
+        
+        # Passer à l'attente de la cote de l'équipe 2
+        context.user_data["awaiting_odds_team2"] = True
+        
+        return ODDS_INPUT_TEAM2
+    except ValueError:
+        await update.message.reply_text(
+            "❌ *Format incorrect*\n\n"
+            f"Veuillez saisir uniquement la valeur numérique de la cote pour *{team1}*.\n\n"
+            "Exemple: `1.85`",
+            parse_mode='Markdown'
+        )
+        return ODDS_INPUT_TEAM1
+
+# Gestionnaire pour la saisie de la cote de l'équipe 2
+async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Gère la saisie de la cote pour la deuxième équipe."""
+    if not context.user_data.get("awaiting_odds_team2", False):
+        return ConversationHandler.END
+    
+    # Importer la vérification d'abonnement et de parrainage de manière "tardive"
+    from database import check_user_subscription
+    from referral_system import has_completed_referrals
+    from verification import send_subscription_required, send_referral_required
+    
+    # Vérifier l'abonnement
+    user_id = update.effective_user.id
+    is_subscribed = await check_user_subscription(user_id)
+    
+    if not is_subscribed:
+        await send_subscription_required(update.message)
+        return ConversationHandler.END
+    
+    # Vérifier le parrainage
+    has_completed_status = await has_completed_referrals(user_id)
+    if not has_completed_status:
+        await send_referral_required(update.message)
+        return ConversationHandler.END
+    
+    user_input = update.message.text.strip()
+    team1 = context.user_data.get("team1", "")
+    team2 = context.user_data.get("team2", "")
+    odds1 = context.user_data.get("odds1", 0)
+    
+    # Extraire la cote
+    try:
+        odds2 = float(user_input.replace(",", "."))
+        
+        # Vérifier que la cote est valide
+        if odds2 < 1.01:
+            await update.message.reply_text(
+                "❌ *Valeur de cote invalide*\n\n"
+                "La cote doit être supérieure à 1.01.",
+                parse_mode='Markdown'
+            )
+            return ODDS_INPUT_TEAM2
+        
+        # Sauvegarder la cote
+        context.user_data["odds2"] = odds2
+        context.user_data["awaiting_odds_team2"] = False
+        
+        # Animation de validation de la cote
+        loading_message = await update.message.reply_text(
+            f"✅ Cote de *{team2}* enregistrée: *{odds2}*",
+            parse_mode='Markdown'
+        )
+        
+        # Animation de génération de prédiction
+        await asyncio.sleep(0.3)
+        await loading_message.edit_text(
+            "🧠 *Analyse des données en cours...*",
+            parse_mode='Markdown'
+        )
+        
+        # Animation stylisée pour l'analyse
+        analysis_frames = [
+            "📊 *Analyse des performances historiques...*",
+            "🏆 *Analyse des confrontations directes...*",
+            "⚽ *Calcul des probabilités de scores...*",
+            "📈 *Finalisation des prédictions...*"
+        ]
+        
+        for frame in analysis_frames:
+            await asyncio.sleep(0.3)
+            await loading_message.edit_text(frame, parse_mode='Markdown')
+        
+        # Génération de la prédiction
+        try:
+            prediction = predictor.predict_match(team1, team2, odds1, odds2)
+            
+            if not prediction or "error" in prediction:
+                error_msg = prediction.get("error", "Erreur inconnue") if prediction else "Impossible de générer une prédiction"
+                
+                # Proposer de réessayer
+                keyboard = [
+                    [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="fifa_new_prediction")],
+                    [InlineKeyboardButton("🎮 Accueil", callback_data="show_games")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await loading_message.edit_text(
+                    f"❌ *Erreur de prédiction*\n\n"
+                    f"{error_msg}\n\n"
+                    f"Veuillez essayer avec d'autres équipes.",
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+                return ConversationHandler.END
+            
+            # Formater et envoyer la prédiction
+            prediction_text = format_prediction_message(prediction)
+            
+            # Animation finale avant d'afficher le résultat
+            final_frames = [
+                "🎯 *Prédiction prête!*",
+                "✨ *Affichage des résultats...*"
+            ]
+            
+            for frame in final_frames:
+                await asyncio.sleep(0.3)
+                await loading_message.edit_text(frame, parse_mode='Markdown')
+            
+            # Proposer une nouvelle prédiction
+            keyboard = [
+                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="fifa_new_prediction")],
+                [InlineKeyboardButton("🎮 Accueil", callback_data="show_games")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await loading_message.edit_text(
+                prediction_text,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
+            # Enregistrer la prédiction dans les logs
+            user_id = context.user_data.get("user_id", update.message.from_user.id)
+            username = context.user_data.get("username", update.message.from_user.username)
+            
+            save_prediction_log(
+                user_id=user_id,
+                username=username,
+                team1=team1,
+                team2=team2,
+                odds1=odds1,
+                odds2=odds2,
+                prediction_result=prediction
+            )
+            
+            return ConversationHandler.END
+        except Exception as e:
+            logger.error(f"Erreur lors de la génération de la prédiction: {e}")
+            
+            # Proposer de réessayer en cas d'erreur
+            keyboard = [
+                [InlineKeyboardButton("🔄 Nouvelle prédiction", callback_data="fifa_new_prediction")],
+                [InlineKeyboardButton("🎮 Accueil", callback_data="show_games")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await loading_message.edit_text(
+                "❌ *Une erreur s'est produite lors de la génération de la prédiction*\n\n"
+                "Veuillez réessayer avec d'autres équipes ou contacter l'administrateur.",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            return ConversationHandler.END
+    except ValueError:
+        await update.message.reply_text(
+            "❌ *Format incorrect*\n\n"
+            f"Veuillez saisir uniquement la valeur numérique de la cote pour *{team2}*.\n\n"
+            "Exemple: `2.35`",
+            parse_mode='Markdown'
+        )
+        return ODDS_INPUT_TEAM2
+        # Cette fonction est appelée depuis fifa_games.py pour traiter les messages entrants
+# concernant les cotes pour FIFA
+async def handle_fifa_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
+    """Traite les messages liés au jeu FIFA."""
+    # Vérifier si nous attendons une cote
+    if context.user_data.get("awaiting_odds_team1", False):
+        return await handle_odds_team1_input(update, context)
+    
+    if context.user_data.get("awaiting_odds_team2", False):
+        return await handle_odds_team2_input(update, context)
+    
+    return None

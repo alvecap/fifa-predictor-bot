@@ -1,4 +1,463 @@
-import logging
+elif query.data.startswith("teams_page_"):
+       # Gestion de la pagination pour les équipes
+       page = int(query.data.split("_")[-1])
+       is_team1 = context.user_data.get("selecting_team1", True)
+       await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
+   
+   elif query.data.startswith("select_team1_"):
+       # Vérifier l'abonnement
+       is_subscribed = await check_user_subscription(user_id)
+       if not is_subscribed:
+           keyboard = [
+               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
+               [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "⚠️ *Abonnement requis*\n\n"
+               "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est plus actif.\n"
+               "Vous devez être abonné pour continuer cette action.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown',
+               disable_web_page_preview=True
+           )
+           return
+           
+       # Vérifier le parrainage
+       has_completed = await has_completed_referrals(user_id)
+       if not has_completed:
+           keyboard = [
+               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "⚠️ *Parrainage requis*\n\n"
+               f"Pour continuer, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
+               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown'
+           )
+           return
+       
+       # Extraire le nom de l'équipe 1
+       team1 = query.data.replace("select_team1_", "")
+       context.user_data["team1"] = team1
+       context.user_data["selecting_team1"] = False
+       
+       # Animation de sélection
+       anim_frames = [
+           f"✅ *{team1}* sélectionné!",
+           f"✅ *{team1}* ✅",
+           f"🎯 *{team1}* sélectionné!"
+       ]
+       
+       for frame in anim_frames:
+           await query.edit_message_text(frame, parse_mode='Markdown')
+           await asyncio.sleep(0.3)
+       
+       # Puis passer à la sélection de l'équipe 2
+       await start_team2_selection(query.message, context, edit=True)
+   
+   elif query.data.startswith("select_team2_"):
+       # Vérifier l'abonnement
+       is_subscribed = await check_user_subscription(user_id)
+       if not is_subscribed:
+           keyboard = [
+               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
+               [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "⚠️ *Abonnement requis*\n\n"
+               "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est plus actif.\n"
+               "Vous devez être abonné pour continuer cette action.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown',
+               disable_web_page_preview=True
+           )
+           return
+           
+       # Vérifier le parrainage
+       has_completed = await has_completed_referrals(user_id)
+       if not has_completed:
+           keyboard = [
+               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "⚠️ *Parrainage requis*\n\n"
+               f"Pour continuer, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
+               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown'
+           )
+           return
+       
+       # Extraire le nom de l'équipe 2
+       team2 = query.data.replace("select_team2_", "")
+       team1 = context.user_data.get("team1", "")
+       
+       if not team1:
+           await query.edit_message_text(
+               "❌ *Erreur de sélection*\n\n"
+               "Veuillez recommencer la procédure de sélection des équipes.",
+               parse_mode='Markdown'
+           )
+           return
+       
+       # Sauvegarder l'équipe 2
+       context.user_data["team2"] = team2
+       
+       # Animation de sélection
+       anim_frames = [
+           f"✅ *{team2}* sélectionné!",
+           f"✅ *{team2}* ✅",
+           f"🎯 *{team2}* sélectionné!"
+       ]
+       
+       for frame in anim_frames:
+           await query.edit_message_text(frame, parse_mode='Markdown')
+           await asyncio.sleep(0.3)
+       
+       # Demander la première cote
+       await query.edit_message_text(
+           f"💰 *Saisie des cotes (obligatoire)*\n\n"
+           f"Match: *{team1}* vs *{team2}*\n\n"
+           f"Veuillez saisir la cote pour *{team1}*\n\n"
+           f"_Exemple: 1.85_",
+           parse_mode='Markdown'
+       )
+       
+       # Passer en mode conversation pour recevoir les cotes
+       context.user_data["awaiting_odds_team1"] = True
+       context.user_data["odds_for_match"] = f"{team1} vs {team2}"
+       
+       return ODDS_INPUT_TEAM1
+   
+   elif query.data == "cancel":
+       # Annulation d'une action
+       await query.edit_message_text("❌ Opération annulée.")
+   
+   elif query.data == "new_prediction":
+       # Vérifier l'abonnement avant de lancer une nouvelle prédiction
+       is_subscribed = await check_user_subscription(user_id)
+       
+       if not is_subscribed:
+           # Message d'erreur si l'abonnement n'est plus actif
+           keyboard = [
+               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
+               [InlineKeyboardButton("🔍 Vérifier à nouveau", callback_data="verify_subscription")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
+               "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown',
+               disable_web_page_preview=True
+           )
+           return
+           
+       # Vérifier le parrainage
+       has_completed = await has_completed_referrals(user_id)
+       if not has_completed:
+           keyboard = [
+               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "⚠️ *Parrainage requis*\n\n"
+               f"Pour accéder aux prédictions, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
+               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown'
+           )
+           return
+       
+       # Message de transition
+       await query.edit_message_text(
+           "🔄 *Lancement d'une nouvelle prédiction...*",
+           parse_mode='Markdown'
+       )
+       
+       # Court délai et passage à la sélection d'équipe
+       context.user_data["selecting_team1"] = True
+       await asyncio.sleep(0.5)
+       await start_team_selection(query.message, context, edit=True) not team1:
+           await query.edit_message_text(
+               "❌ *Erreur de sélection*\n\n"
+               "Veuillez recommencer la procédure de sélection des équipes.",
+               parse_mode='Markdown'
+           )
+           return
+       
+       # Sauvegarder l'équipe 2
+       context.user_data["team2"] = team2
+       
+       # Animation de sélection
+       anim_frames = [
+           f"✅ *{team2}* sélectionné!",
+           f"✅ *{team2}* ✅",
+           f"🎯 *{team2}* sélectionné!"
+       ]
+       
+       for frame in anim_frames:
+           await query.edit_message_text(frame, parse_mode='Markdown')
+           await asyncio.sleep(0.3)
+       
+       # Demander la première cote
+       await query.edit_message_text(
+           f"💰 *Saisie des cotes (obligatoire)*\n\n"
+           f"Match: *{team1}* vs *{team2}*\n\n"
+           f"Veuillez saisir la cote pour *{team1}*\n\n"
+           f"_Exemple: 1.85_",
+           parse_mode='Markdown'
+       )
+       
+       # Passer en mode conversation pour recevoir les cotes
+       context.user_data["awaiting_odds_team1"] = True
+       context.user_data["odds_for_match"] = f"{team1} vs {team2}"
+       
+       return ODDS_INPUT_
+
+# Message standard quand l'abonnement est requis
+async def send_subscription_required(message) -> None:
+   """Envoie un message indiquant que l'abonnement est nécessaire."""
+   keyboard = [
+       [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
+       [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
+   ]
+   reply_markup = InlineKeyboardMarkup(keyboard)
+   
+   await message.reply_text(
+       "⚠️ *Abonnement requis*\n\n"
+       "Pour utiliser cette fonctionnalité, vous devez être abonné à notre canal.\n\n"
+       "*Instructions:*\n"
+       "1️⃣ Rejoignez [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n"
+       "2️⃣ Cliquez sur '🔍 Vérifier mon abonnement'",
+       reply_markup=reply_markup,
+       parse_mode='Markdown',
+       disable_web_page_preview=True
+   )
+
+# Message standard quand le parrainage est requis
+async def send_referral_required(message) -> None:
+   """Envoie un message indiquant que le parrainage est nécessaire."""
+   keyboard = [
+       [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+       [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+   ]
+   reply_markup = InlineKeyboardMarkup(keyboard)
+   
+   await message.reply_text(
+       "⚠️ *Parrainage requis*\n\n"
+       f"Pour utiliser cette fonctionnalité, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
+       "Partagez votre lien de parrainage avec vos amis pour débloquer toutes les fonctionnalités.",
+       reply_markup=reply_markup,
+       parse_mode='Markdown'
+   )
+
+# Commande pour vérifier l'abonnement au canal
+async def check_subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+   """Vérifie si l'utilisateur est abonné au canal @alvecapitalofficiel."""
+   user_id = update.effective_user.id
+   context.user_data["user_id"] = user_id
+   
+   # Utiliser l'animation de vérification
+   await animated_subscription_check(update.message, user_id, context)
+
+# Commande pour gérer les parrainages
+async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+   """Gère les parrainages de l'utilisateur."""
+   user_id = update.effective_user.id
+   username = update.effective_user.username
+   
+   # Vérifier l'abonnement d'abord
+   is_subscribed = await check_user_subscription(user_id)
+   if not is_subscribed:
+       await send_subscription_required(update.message)
+       return
+   
+   # S'assurer que l'utilisateur est enregistré
+   await register_user(user_id, username)
+   
+   # Obtenir les statistiques de parrainage
+   referral_count = await count_referrals(user_id)
+   has_completed = referral_count >= MAX_REFERRALS
+   referred_users = await get_referred_users(user_id)
+   
+   # Générer un lien de parrainage
+   bot_info = await context.bot.get_me()
+   bot_username = bot_info.username
+   referral_link = await generate_referral_link(user_id, bot_username)
+   
+   # Créer le message
+   message_text = "👥 *Système de Parrainage FIFA 4x4 Predictor*\n\n"
+   
+   if has_completed:
+       message_text += "✅ *Statut: Parrainage complété*\n"
+       message_text += f"Vous avez parrainé {referral_count}/{MAX_REFERRALS} personne(s) requise(s).\n"
+       message_text += "Toutes les fonctionnalités sont débloquées!\n\n"
+   else:
+       message_text += "⏳ *Statut: Parrainage en cours*\n"
+       message_text += f"Progression: {referral_count}/{MAX_REFERRALS} personne(s) parrainée(s).\n"
+       message_text += f"Parrainez encore {MAX_REFERRALS - referral_count} personne(s) pour débloquer toutes les fonctionnalités.\n\n"
+   
+   message_text += "*Votre lien de parrainage:*\n"
+   message_text += f"`{referral_link}`\n\n"
+   
+   # Ajouter les instructions de parrainage
+   message_text += get_referral_instructions() + "\n\n"
+   
+   # Ajouter la liste des utilisateurs parrainés
+   if referred_users:
+       message_text += "\n*Utilisateurs que vous avez parrainés:*\n"
+       for user in referred_users:
+           user_username = user.get('username', 'Inconnu')
+           is_verified = "✅" if user.get('is_verified', False) else "⏳"
+           message_text += f"• {is_verified} {user_username}\n"
+   
+   # Créer les boutons
+   buttons = [
+       [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")]
+   ]
+   
+   if not has_completed:
+       buttons.append([InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")])
+   
+   reply_markup = InlineKeyboardMarkup(buttons)
+   
+   await update.message.reply_text(
+       message_text,
+       parse_mode='Markdown',
+       reply_markup=reply_markup,
+       disable_web_page_preview=True
+   )
+
+# Lancer une prédiction directement avec la commande predict
+async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+   """Lance le processus de prédiction quand la commande /predict est envoyée."""
+   user_id = update.effective_user.id
+   context.user_data["user_id"] = user_id
+   
+   # Vérifier l'abonnement
+   is_subscribed = await check_user_subscription(user_id)
+   if not is_subscribed:
+       await send_subscription_required(update.message)
+       return
+   
+   # Vérifier aussi le parrainage
+   has_completed = await has_completed_referrals(user_id)
+   if not has_completed:
+       await send_referral_required(update.message)
+       return
+   
+   # Maintenant que les vérifications sont passées, utiliser l'animation de vérification avec le contexte
+   await animated_subscription_check(update.message, user_id, context)
+
+# Gestionnaire des boutons de callback
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+   """Gère les clics sur les boutons inline."""
+   query = update.callback_query
+   await query.answer()
+   
+   # Récupérer les données utilisateur
+   user_id = query.from_user.id
+   context.user_data["user_id"] = user_id
+   context.user_data["username"] = query.from_user.username
+   
+   if query.data == "verify_subscription":
+       # Utiliser l'animation de vérification avec le contexte
+       await animated_subscription_check(query.message, user_id, context, edit=True)
+   
+   elif query.data == "verify_referral":
+       # Vérifier le parrainage avec animation
+       await animated_referral_check(query.message, user_id, context, edit=True)
+   
+   elif query.data == "get_referral_link":
+       # Générer et afficher un lien de parrainage
+       bot_info = await context.bot.get_me()
+       bot_username = bot_info.username
+       referral_link = await generate_referral_link(user_id, bot_username)
+       
+       # Obtenir le nombre actuel de parrainages
+       referral_count = await count_referrals(user_id)
+       
+       # Créer les boutons
+       keyboard = [
+           [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")],
+           [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+       ]
+       reply_markup = InlineKeyboardMarkup(keyboard)
+       
+       # Message avec les instructions de parrainage
+       message_text = f"🔗 *Votre lien de parrainage:*\n\n`{referral_link}`\n\n"
+       message_text += f"_Progression: {referral_count}/{MAX_REFERRALS} parrainage(s)_\n\n"
+       message_text += get_referral_instructions()
+       
+       await query.edit_message_text(
+           message_text,
+           parse_mode='Markdown',
+           reply_markup=reply_markup,
+           disable_web_page_preview=True
+       )
+   
+   elif query.data == "copy_referral_link":
+       # Telegram gère automatiquement la copie
+       await query.answer("Lien copié dans le presse-papier!")
+   
+   elif query.data == "start_prediction":
+       # Vérifier l'abonnement avant de lancer la prédiction
+       is_subscribed = await check_user_subscription(user_id)
+       
+       if not is_subscribed:
+           # Message d'erreur si l'abonnement n'est plus actif
+           keyboard = [
+               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
+               [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "⚠️ *Abonnement requis*\n\n"
+               "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est pas actif.\n"
+               "Vous devez être abonné pour utiliser cette fonctionnalité.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown',
+               disable_web_page_preview=True
+           )
+           return
+           
+       # Vérifier aussi le parrainage
+       has_completed = await has_completed_referrals(user_id)
+       if not has_completed:
+           # Message d'erreur si le parrainage n'est pas complété
+           keyboard = [
+               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+           ]
+           reply_markup = InlineKeyboardMarkup(keyboard)
+           
+           await query.edit_message_text(
+               "⚠️ *Parrainage requis*\n\n"
+               f"Pour accéder aux prédictions, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
+               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
+               reply_markup=reply_markup,
+               parse_mode='Markdown'
+           )
+           return
+       
+       # Lancer la sélection des équipes
+       await start_team_selection(query.message, context, edit=True)import logging
 import re
 import asyncio
 from typing import Dict, List, Optional, Tuple, Any
@@ -293,7 +752,7 @@ async def animated_referral_check(message, user_id, context=None, edit=False) ->
     
     # Animation plus longue (au moins 3 secondes total)
     # Animation plus longue (au moins 3 secondes total)
-   # Animation plus longue (au moins 3 secondes total)
+    # Animation plus longue (au moins 3 secondes total)
     check_frames = [
         "📊 *Recherche de vos filleuls...*",
         "👥 *Comptage des parrainages...*",
@@ -381,435 +840,7 @@ async def animated_referral_check(message, user_id, context=None, edit=False) ->
            parse_mode='Markdown'
        )
        return False
-
-# Message standard quand l'abonnement est requis
-async def send_subscription_required(message) -> None:
-   """Envoie un message indiquant que l'abonnement est nécessaire."""
-   keyboard = [
-       [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
-       [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-   ]
-   reply_markup = InlineKeyboardMarkup(keyboard)
-   
-   await message.reply_text(
-       "⚠️ *Abonnement requis*\n\n"
-       "Pour utiliser cette fonctionnalité, vous devez être abonné à notre canal.\n\n"
-       "*Instructions:*\n"
-       "1️⃣ Rejoignez [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n"
-       "2️⃣ Cliquez sur '🔍 Vérifier mon abonnement'",
-       reply_markup=reply_markup,
-       parse_mode='Markdown',
-       disable_web_page_preview=True
-   )
-
-# Message standard quand le parrainage est requis
-async def send_referral_required(message) -> None:
-   """Envoie un message indiquant que le parrainage est nécessaire."""
-   keyboard = [
-       [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
-       [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-   ]
-   reply_markup = InlineKeyboardMarkup(keyboard)
-   
-   await message.reply_text(
-       "⚠️ *Parrainage requis*\n\n"
-       f"Pour utiliser cette fonctionnalité, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
-       "Partagez votre lien de parrainage avec vos amis pour débloquer toutes les fonctionnalités.",
-       reply_markup=reply_markup,
-       parse_mode='Markdown'
-   )
-
-# Commande pour vérifier l'abonnement au canal
-async def check_subscription_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-   """Vérifie si l'utilisateur est abonné au canal @alvecapitalofficiel."""
-   user_id = update.effective_user.id
-   context.user_data["user_id"] = user_id
-   
-   # Utiliser l'animation de vérification
-   await animated_subscription_check(update.message, user_id, context)
-
-# Commande pour gérer les parrainages
-async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-   """Gère les parrainages de l'utilisateur."""
-   user_id = update.effective_user.id
-   username = update.effective_user.username
-   
-   # Vérifier l'abonnement d'abord
-   is_subscribed = await check_user_subscription(user_id)
-   if not is_subscribed:
-       await send_subscription_required(update.message)
-       return
-   
-   # S'assurer que l'utilisateur est enregistré
-   await register_user(user_id, username)
-   
-   # Obtenir les statistiques de parrainage
-   referral_count = await count_referrals(user_id)
-   has_completed = referral_count >= MAX_REFERRALS
-   referred_users = await get_referred_users(user_id)
-   
-   # Générer un lien de parrainage
-   bot_info = await context.bot.get_me()
-   bot_username = bot_info.username
-   referral_link = await generate_referral_link(user_id, bot_username)
-   
-   # Créer le message
-   message_text = "👥 *Système de Parrainage FIFA 4x4 Predictor*\n\n"
-   
-   if has_completed:
-       message_text += "✅ *Statut: Parrainage complété*\n"
-       message_text += f"Vous avez parrainé {referral_count}/{MAX_REFERRALS} personne(s) requise(s).\n"
-       message_text += "Toutes les fonctionnalités sont débloquées!\n\n"
-   else:
-       message_text += "⏳ *Statut: Parrainage en cours*\n"
-       message_text += f"Progression: {referral_count}/{MAX_REFERRALS} personne(s) parrainée(s).\n"
-       message_text += f"Parrainez encore {MAX_REFERRALS - referral_count} personne(s) pour débloquer toutes les fonctionnalités.\n\n"
-   
-   message_text += "*Votre lien de parrainage:*\n"
-   message_text += f"`{referral_link}`\n\n"
-   
-   # Ajouter les instructions de parrainage
-   message_text += get_referral_instructions() + "\n\n"
-   
-   # Ajouter la liste des utilisateurs parrainés
-   if referred_users:
-       message_text += "\n*Utilisateurs que vous avez parrainés:*\n"
-       for user in referred_users:
-           user_username = user.get('username', 'Inconnu')
-           is_verified = "✅" if user.get('is_verified', False) else "⏳"
-           message_text += f"• {is_verified} {user_username}\n"
-   
-   # Créer les boutons
-   buttons = [
-       [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")]
-   ]
-   
-   if not has_completed:
-       buttons.append([InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")])
-   
-   reply_markup = InlineKeyboardMarkup(buttons)
-   
-   await update.message.reply_text(
-       message_text,
-       parse_mode='Markdown',
-       reply_markup=reply_markup,
-       disable_web_page_preview=True
-   )
-
-# Lancer une prédiction directement avec la commande predict
-async def predict_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-   """Lance le processus de prédiction quand la commande /predict est envoyée."""
-   user_id = update.effective_user.id
-   context.user_data["user_id"] = user_id
-   
-   # Vérifier l'abonnement
-   is_subscribed = await check_user_subscription(user_id)
-   if not is_subscribed:
-       await send_subscription_required(update.message)
-       return
-   
-   # Vérifier aussi le parrainage
-   has_completed = await has_completed_referrals(user_id)
-   if not has_completed:
-       await send_referral_required(update.message)
-       return
-   
-   # Maintenant que les vérifications sont passées, utiliser l'animation de vérification avec le contexte
-   await animated_subscription_check(update.message, user_id, context)
-
-# Gestionnaire des boutons de callback
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-   """Gère les clics sur les boutons inline."""
-   query = update.callback_query
-   await query.answer()
-   
-   # Récupérer les données utilisateur
-   user_id = query.from_user.id
-   context.user_data["user_id"] = user_id
-   context.user_data["username"] = query.from_user.username
-   
-   if query.data == "verify_subscription":
-       # Utiliser l'animation de vérification avec le contexte
-       await animated_subscription_check(query.message, user_id, context, edit=True)
-   
-   elif query.data == "verify_referral":
-       # Vérifier le parrainage avec animation
-       await animated_referral_check(query.message, user_id, context, edit=True)
-   
-   elif query.data == "get_referral_link":
-       # Générer et afficher un lien de parrainage
-       bot_info = await context.bot.get_me()
-       bot_username = bot_info.username
-       referral_link = await generate_referral_link(user_id, bot_username)
-       
-       # Obtenir le nombre actuel de parrainages
-       referral_count = await count_referrals(user_id)
-       
-       # Créer les boutons
-       keyboard = [
-           [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")],
-           [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-       ]
-       reply_markup = InlineKeyboardMarkup(keyboard)
-       
-       # Message avec les instructions de parrainage
-       message_text = f"🔗 *Votre lien de parrainage:*\n\n`{referral_link}`\n\n"
-       message_text += f"_Progression: {referral_count}/{MAX_REFERRALS} parrainage(s)_\n\n"
-       message_text += get_referral_instructions()
-       
-       await query.edit_message_text(
-           message_text,
-           parse_mode='Markdown',
-           reply_markup=reply_markup,
-           disable_web_page_preview=True
-       )
-   
-   elif query.data == "copy_referral_link":
-       # Telegram gère automatiquement la copie
-       await query.answer("Lien copié dans le presse-papier!")
-   
-   elif query.data == "start_prediction":
-       # Vérifier l'abonnement avant de lancer la prédiction
-       is_subscribed = await check_user_subscription(user_id)
-       
-       if not is_subscribed:
-           # Message d'erreur si l'abonnement n'est plus actif
-           keyboard = [
-               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
-               [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Abonnement requis*\n\n"
-               "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est pas actif.\n"
-               "Vous devez être abonné pour utiliser cette fonctionnalité.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown',
-               disable_web_page_preview=True
-           )
-           return
-           
-       # Vérifier aussi le parrainage
-       # Vérifier aussi le parrainage
-       has_completed = await has_completed_referrals(user_id)
-       if not has_completed:
-           # Message d'erreur si le parrainage n'est pas complété
-           keyboard = [
-               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
-               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Parrainage requis*\n\n"
-               f"Pour accéder aux prédictions, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
-               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown'
-           )
-           return
-       
-       # Lancer la sélection des équipes
-       await start_team_selection(query.message, context, edit=True)
-   
-   elif query.data.startswith("teams_page_"):
-       # Gestion de la pagination pour les équipes
-       page = int(query.data.split("_")[-1])
-       is_team1 = context.user_data.get("selecting_team1", True)
-       await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
-   
-   elif query.data.startswith("select_team1_"):
-       # Vérifier l'abonnement
-       is_subscribed = await check_user_subscription(user_id)
-       if not is_subscribed:
-           keyboard = [
-               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
-               [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Abonnement requis*\n\n"
-               "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est plus actif.\n"
-               "Vous devez être abonné pour continuer cette action.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown',
-               disable_web_page_preview=True
-           )
-           return
-           
-       # Vérifier le parrainage
-       has_completed = await has_completed_referrals(user_id)
-       if not has_completed:
-           keyboard = [
-               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
-               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Parrainage requis*\n\n"
-               f"Pour continuer, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
-               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown'
-           )
-           return
-       
-       # Extraire le nom de l'équipe 1
-       team1 = query.data.replace("select_team1_", "")
-       context.user_data["team1"] = team1
-       context.user_data["selecting_team1"] = False
-       
-       # Animation de sélection
-       anim_frames = [
-           f"✅ *{team1}* sélectionné!",
-           f"✅ *{team1}* ✅",
-           f"🎯 *{team1}* sélectionné!"
-       ]
-       
-       for frame in anim_frames:
-           await query.edit_message_text(frame, parse_mode='Markdown')
-           await asyncio.sleep(0.3)
-       
-       # Puis passer à la sélection de l'équipe 2
-       await start_team2_selection(query.message, context, edit=True)
-   
-   elif query.data.startswith("select_team2_"):
-       # Vérifier l'abonnement
-       is_subscribed = await check_user_subscription(user_id)
-       if not is_subscribed:
-           keyboard = [
-               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
-               [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Abonnement requis*\n\n"
-               "Votre abonnement à [AL VE CAPITAL](https://t.me/alvecapitalofficiel) n'est plus actif.\n"
-               "Vous devez être abonné pour continuer cette action.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown',
-               disable_web_page_preview=True
-           )
-           return
-           
-       # Vérifier le parrainage
-       has_completed = await has_completed_referrals(user_id)
-       if not has_completed:
-           keyboard = [
-               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
-               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Parrainage requis*\n\n"
-               f"Pour continuer, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
-               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown'
-           )
-           return
-       
-       # Extraire le nom de l'équipe 2
-       team2 = query.data.replace("select_team2_", "")
-       team1 = context.user_data.get("team1", "")
-       
-       if not team1:
-           await query.edit_message_text(
-               "❌ *Erreur de sélection*\n\n"
-               "Veuillez recommencer la procédure de sélection des équipes.",
-               parse_mode='Markdown'
-           )
-           return
-       
-       # Sauvegarder l'équipe 2
-       context.user_data["team2"] = team2
-       
-       # Animation de sélection
-       anim_frames = [
-           f"✅ *{team2}* sélectionné!",
-           f"✅ *{team2}* ✅",
-           f"🎯 *{team2}* sélectionné!"
-       ]
-       
-       for frame in anim_frames:
-           await query.edit_message_text(frame, parse_mode='Markdown')
-           await asyncio.sleep(0.3)
-       
-       # Demander la première cote
-       await query.edit_message_text(
-           f"💰 *Saisie des cotes (obligatoire)*\n\n"
-           f"Match: *{team1}* vs *{team2}*\n\n"
-           f"Veuillez saisir la cote pour *{team1}*\n\n"
-           f"_Exemple: 1.85_",
-           parse_mode='Markdown'
-       )
-       
-       # Passer en mode conversation pour recevoir les cotes
-       context.user_data["awaiting_odds_team1"] = True
-       context.user_data["odds_for_match"] = f"{team1} vs {team2}"
-       
-       return ODDS_INPUT_TEAM1
-   
-   elif query.data == "cancel":
-       # Annulation d'une action
-       await query.edit_message_text("❌ Opération annulée.")
-   
-   elif query.data == "new_prediction":
-       # Vérifier l'abonnement avant de lancer une nouvelle prédiction
-       is_subscribed = await check_user_subscription(user_id)
-       
-       if not is_subscribed:
-           # Message d'erreur si l'abonnement n'est plus actif
-           keyboard = [
-               [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
-               [InlineKeyboardButton("🔍 Vérifier à nouveau", callback_data="verify_subscription")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "❌ Vous n'êtes plus abonné au canal AL VE CAPITAL.\n"
-               "🔄 Veuillez vous réabonner pour continuer à utiliser le bot.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown',
-               disable_web_page_preview=True
-           )
-           return
-           
-       # Vérifier le parrainage
-       has_completed = await has_completed_referrals(user_id)
-       if not has_completed:
-           keyboard = [
-               [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
-               [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
-           ]
-           reply_markup = InlineKeyboardMarkup(keyboard)
-           
-           await query.edit_message_text(
-               "⚠️ *Parrainage requis*\n\n"
-               f"Pour accéder aux prédictions, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
-               "Cliquez sur le bouton ci-dessous pour obtenir votre lien de parrainage.",
-               reply_markup=reply_markup,
-               parse_mode='Markdown'
-           )
-           return
-       
-       # Message de transition
-       await query.edit_message_text(
-           "🔄 *Lancement d'une nouvelle prédiction...*",
-           parse_mode='Markdown'
-       )
-       
-       # Court délai et passage à la sélection d'équipe
-       context.user_data["selecting_team1"] = True
-       await asyncio.sleep(0.5)
-       await start_team_selection(query.message, context, edit=True)
-
-# Fonction pour démarrer la sélection des équipes (première équipe)
+       # Fonction pour démarrer la sélection des équipes (première équipe)
 async def start_team_selection(message, context, edit=False, page=0) -> None:
    """Affiche la première page de sélection d'équipe."""
    try:
@@ -1154,8 +1185,7 @@ async def teams_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
    if not is_subscribed:
        await send_subscription_required(update.message)
        return
-   
-   # Vérifier le parrainage avant de traiter
+       # Vérifier le parrainage avant de traiter
    has_completed = await has_completed_referrals(user_id)
    if not has_completed:
        await send_referral_required(update.message)

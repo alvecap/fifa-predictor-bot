@@ -5,7 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.ext import ContextTypes
 
 from database import check_user_subscription
-from referral_system import has_completed_referrals, MAX_REFERRALS, count_referrals
+from admin_access import is_admin
 
 # Configuration du logging
 logging.basicConfig(
@@ -13,33 +13,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Liste des administrateurs (accès complet sans vérifications)
-ADMIN_USERNAMES = ["alve08"]  # Noms d'utilisateur des admins
-ADMIN_IDS = [6054768666]  # ID des administrateurs
-
-async def is_admin(user_id: int, username: str = None) -> bool:
-    """
-    Vérifie si l'utilisateur est un administrateur.
-    
-    Args:
-        user_id (int): ID Telegram de l'utilisateur
-        username (str, optional): Nom d'utilisateur Telegram
-        
-    Returns:
-        bool: True si l'utilisateur est admin, False sinon
-    """
-    # Vérification par ID (plus fiable)
-    if user_id in ADMIN_IDS:
-        logger.info(f"Accès administrateur accordé à l'utilisateur ID: {user_id}")
-        return True
-    
-    # Vérification par nom d'utilisateur (backup)
-    if username and username.lower() in [admin.lower() for admin in ADMIN_USERNAMES]:
-        logger.info(f"Accès administrateur accordé à l'utilisateur {username} (ID: {user_id})")
-        return True
-    
-    return False
 
 # Vérification d'abonnement
 async def verify_subscription(message, user_id, username, context=None, edit=False) -> bool:
@@ -57,7 +30,7 @@ async def verify_subscription(message, user_id, username, context=None, edit=Fal
         bool: True si l'utilisateur est abonné ou admin, False sinon
     """
     # Vérifier si c'est un admin
-    if await is_admin(user_id, username):
+    if is_admin(user_id, username):
         if edit and hasattr(message, 'edit_text'):
             await message.edit_text(
                 "🔑 *Accès administrateur*\n\n"
@@ -180,8 +153,11 @@ async def verify_referral(message, user_id, username, context=None, edit=False) 
     Returns:
         bool: True si l'utilisateur a complété ses parrainages ou est admin, False sinon
     """
+    # Importer ces fonctions ici pour éviter l'importation circulaire
+    from referral_system import has_completed_referrals, count_referrals, MAX_REFERRALS
+    
     # Vérifier si c'est un admin
-    if await is_admin(user_id, username):
+    if is_admin(user_id, username):
         if edit and hasattr(message, 'edit_text'):
             await message.edit_text(
                 "🔑 *Accès administrateur*\n\n"
@@ -327,6 +303,8 @@ async def send_subscription_required(message) -> None:
 # Message standard quand le parrainage est requis
 async def send_referral_required(message) -> None:
     """Envoie un message indiquant que le parrainage est nécessaire."""
+    from referral_system import MAX_REFERRALS
+    
     keyboard = [
         [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
         [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
@@ -355,8 +333,10 @@ async def verify_all_requirements(user_id, username, message, context=None) -> b
     Returns:
         bool: True si l'utilisateur a accès (admin ou abonné+parrainé), False sinon
     """
+    from referral_system import has_completed_referrals
+    
     # Vérifier d'abord si c'est un admin
-    if await is_admin(user_id, username):
+    if is_admin(user_id, username):
         logger.info(f"Vérification contournée pour l'administrateur {username} (ID: {user_id})")
         return True
     
@@ -397,7 +377,7 @@ async def show_games_menu(message, context) -> None:
     # Vérifier si c'est un admin
     admin_status = False
     if user_id:
-        admin_status = await is_admin(user_id, username)
+        admin_status = is_admin(user_id, username)
     
     # Texte du menu
     menu_text = (
@@ -463,29 +443,3 @@ async def show_games_menu(message, context) -> None:
             "Désolé, une erreur s'est produite lors du chargement du menu des jeux. Veuillez réessayer.",
             parse_mode='Markdown'
         )
-        
-# Vérification complète pour les callbacks
-async def verify_callback_requirements(user_id, username, message, callback_function, context, *args, **kwargs) -> None:
-    """
-    Vérifie les conditions d'accès avant d'exécuter un callback.
-    
-    Args:
-        user_id (int): ID de l'utilisateur
-        username (str): Nom d'utilisateur
-        message: Message Telegram
-        callback_function: Fonction de callback à exécuter si les vérifications sont passées
-        context: Contexte de conversation Telegram
-        *args, **kwargs: Arguments additionnels pour la fonction de callback
-    """
-    # Vérifier d'abord si c'est un admin
-    if await is_admin(user_id, username):
-        # Exécuter directement le callback pour les admins
-        logger.info(f"Exécution directe pour l'admin {username} (ID: {user_id})")
-        await callback_function(context, *args, **kwargs)
-        return
-    
-    # Pour les non-admins, vérifier les conditions d'accès
-    has_access = await verify_all_requirements(user_id, username, message, context)
-    if has_access:
-        # Si toutes les vérifications sont passées, exécuter le callback
-        await callback_function(context, *args, **kwargs)

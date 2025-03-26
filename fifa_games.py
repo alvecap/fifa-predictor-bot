@@ -13,9 +13,10 @@ from telegram.ext import (
 )
 
 from config import TELEGRAM_TOKEN, WELCOME_MESSAGE
+from admin_access import is_admin
 from verification import (
-    is_admin, send_subscription_required, send_referral_required,
-    verify_all_requirements, show_games_menu
+    verify_subscription, verify_referral, send_subscription_required, 
+    send_referral_required, verify_all_requirements, show_games_menu
 )
 from referral_system import (
     register_user, generate_referral_link,
@@ -38,57 +39,7 @@ logger = logging.getLogger(__name__)
 BACCARAT_INPUT = 1
 ODDS_INPUT = 2
 
-# Fonction pour vérifier l'abonnement et le parrainage
-async def check_user_access(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Vérifie si l'utilisateur a accès aux fonctionnalités (admin ou abonné+parrainé)"""
-    user_id = update.effective_user.id
-    username = update.effective_user.username
-    context.user_data["user_id"] = user_id
-    context.user_data["username"] = username
-    
-    # Vérifier si l'utilisateur est admin
-    admin_status = await is_admin(user_id, username)
-    if admin_status:
-        logger.info(f"Accès admin confirmé pour {username} (ID: {user_id})")
-        return True
-        
-    # Vérifier l'abonnement et le parrainage pour les non-admin
-    return await verify_all_requirements(user_id, username, update.effective_message, context)
-
-# Gestionnaire de sélection du jeu depuis le menu principal
-async def handle_game_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gère la sélection d'un jeu depuis le menu principal."""
-    query = update.callback_query
-    user_id = query.from_user.id
-    username = query.from_user.username
-    data = query.data
-    
-    # Log pour le debugging
-    logger.info(f"Sélection de jeu: {data} par utilisateur {username} (ID: {user_id})")
-    
-    # Vérifier l'accès utilisateur (sauf pour les admin)
-    admin_status = await is_admin(user_id, username)
-    if not admin_status:
-        has_access = await verify_all_requirements(user_id, username, query.message, context)
-        if not has_access:
-            return
-    
-    await query.answer()  # Répondre au callback query
-    
-    if data == "game_fifa":
-        # Lancer le jeu FIFA
-        await start_fifa_game(update, context)
-    elif data == "game_apple":
-        # Lancer le jeu Apple of Fortune
-        await start_apple_game(update, context)
-    elif data == "game_baccarat":
-        # Lancer le jeu Baccarat
-        await start_baccarat_game(update, context)
-    else:
-        # Commande inconnue, retour au menu
-        await show_games_menu(query.message, context)
-
-# Fonction principale pour le jeu FIFA 4x4
+# Fonction pour le jeu FIFA 4x4
 async def start_fifa_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Lance le jeu FIFA 4x4 Predictor."""
     query = update.callback_query
@@ -123,7 +74,7 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     username = query.from_user.username
     
     # Vérifier l'accès utilisateur (sauf pour les admin)
-    admin_status = await is_admin(user_id, username)
+    admin_status = is_admin(user_id, username)
     if not admin_status:
         has_access = await verify_all_requirements(user_id, username, query.message, context)
         if not has_access:
@@ -214,6 +165,42 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await start_fifa_game(update, context)
     
     return None
+
+# Gestionnaire de sélection du jeu depuis le menu principal
+async def handle_game_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gère la sélection d'un jeu depuis le menu principal."""
+    query = update.callback_query
+    user_id = query.from_user.id
+    username = query.from_user.username
+    data = query.data
+    
+    # Log pour le debugging
+    logger.info(f"Sélection de jeu: {data} par utilisateur {username} (ID: {user_id})")
+    
+    # Vérifier l'accès utilisateur (sauf pour les admin)
+    admin_status = is_admin(user_id, username)
+    if not admin_status:
+        has_access = await verify_all_requirements(user_id, username, query.message, context)
+        if not has_access:
+            return
+    
+    await query.answer()  # Répondre au callback query
+    
+    if data == "game_fifa":
+        # Lancer le jeu FIFA
+        await start_fifa_game(update, context)
+    elif data == "game_apple":
+        # Lancer le jeu Apple of Fortune
+        await start_apple_game(update, context)
+    elif data == "game_baccarat":
+        # Lancer le jeu Baccarat
+        await start_baccarat_game(update, context)
+    elif data == "show_games":
+        # Afficher le menu des jeux
+        await show_games_menu(query.message, context)
+    else:
+        # Commande inconnue, retour au menu
+        await show_games_menu(query.message, context)
 
 # Fonction pour démarrer la sélection des équipes (première équipe)
 async def start_team_selection(message, context, edit=False, page=0) -> None:
@@ -343,7 +330,7 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
     # Vérifier si c'est un admin d'abord
     user_id = update.effective_user.id
     username = update.effective_user.username
-    admin_status = await is_admin(user_id, username)
+    admin_status = is_admin(user_id, username)
     
     # Si c'est un admin, pas besoin de vérifications supplémentaires
     if not admin_status:
@@ -411,7 +398,7 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
     # Vérifier si c'est un admin d'abord
     user_id = update.effective_user.id
     username = update.effective_user.username
-    admin_status = await is_admin(user_id, username)
+    admin_status = is_admin(user_id, username)
     
     # Si c'est un admin, pas besoin de vérifications supplémentaires
     if not admin_status:
@@ -561,7 +548,8 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         return ODDS_INPUT
-        # Gestionnaire principal des callbacks
+
+# Gestionnaire principal des callbacks
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Gère tous les callbacks de boutons"""
     query = update.callback_query
@@ -594,12 +582,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await handle_baccarat_callback(update, context)
     elif data == "verify_subscription":
         # Vérification d'abonnement
-        from verification import verify_subscription
-        await verify_subscription(query.message, user_id, username, context)
+        await verify_subscription(query.message, user_id, username, context, edit=True)
     elif data == "verify_referral":
         # Vérification de parrainage
-        from verification import verify_referral
-        await verify_referral(query.message, user_id, username, context)
+        await verify_referral(query.message, user_id, username, context, edit=True)
     elif data == "get_referral_link":
         # Générer et afficher un lien de parrainage
         bot_info = await context.bot.get_me()
@@ -644,7 +630,7 @@ async def handle_game_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["username"] = username
     
     # Vérifier le statut admin
-    admin_status = await is_admin(user_id, username)
+    admin_status = is_admin(user_id, username)
     if admin_status:
         logger.info(f"Message reçu de l'administrateur {username} (ID: {user_id})")
     
@@ -670,7 +656,7 @@ async def games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     username = update.effective_user.username
     
     # Vérifier si c'est un admin
-    admin_status = await is_admin(user_id, username)
+    admin_status = is_admin(user_id, username)
     if admin_status:
         logger.info(f"Commande /games par l'administrateur {username} (ID: {user_id})")
         # Pour les admins, afficher directement le menu des jeux
@@ -688,7 +674,6 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = update.effective_user.id
     username = update.effective_user.username
     
-    from verification import verify_subscription
     await verify_subscription(update.message, user_id, username, context)
 
 # Fonction principale pour démarrer le bot
@@ -701,7 +686,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data["username"] = username
     
     # Vérifier si c'est un admin
-    admin_status = await is_admin(user_id, username)
+    admin_status = is_admin(user_id, username)
     if admin_status:
         logger.info(f"Commande /start par l'administrateur {username} (ID: {user_id})")
         
@@ -722,10 +707,21 @@ def main() -> None:
         application.add_handler(CommandHandler("check", check_command))
         application.add_handler(CommandHandler("referral", referral_command))
         
+        # Gestionnaire de conversation pour les entrées de cotes
+        conv_handler = ConversationHandler(
+            entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
+            states={
+                ODDS_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
+                BACCARAT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)]
+            },
+            fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+        )
+        application.add_handler(conv_handler)
+        
         # Gestionnaire pour tous les callbacks
         application.add_handler(CallbackQueryHandler(button_callback))
         
-        # Ajouter le gestionnaire pour les messages normaux
+        # Ajouter le gestionnaire pour les messages normaux non gérés par la conversation
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages))
         
         # Ajouter le gestionnaire d'erreurs

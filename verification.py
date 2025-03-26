@@ -38,33 +38,18 @@ async def animated_subscription_check(update: Update, context: ContextTypes.DEFA
     user_id = update.effective_user.id
     username = update.effective_user.username
     
-    return await _animated_subscription_check(update.message, user_id, username, context)
-
-async def _animated_subscription_check(message, user_id, username, context=None, edit=False) -> bool:
-    """Effectue une vérification d'abonnement avec animation et retourne le résultat."""
     # Vérifier d'abord si c'est un admin
     if await is_admin(user_id, username):
-        if edit:
-            await message.edit_text(
-                "🔑 *Accès administrateur*\n\n"
-                "Toutes les fonctionnalités sont débloquées en mode administrateur.",
-                parse_mode='Markdown'
-            )
-        else:
-            await message.reply_text(
-                "🔑 *Accès administrateur*\n\n"
-                "Toutes les fonctionnalités sont débloquées en mode administrateur.",
-                parse_mode='Markdown'
-            )
+        await update.message.reply_text(
+            "🔑 *Accès administrateur*\n\n"
+            "Toutes les fonctionnalités sont débloquées en mode administrateur.",
+            parse_mode='Markdown'
+        )
         return True
     
     # Message initial
     verify_text = "🔍 *Vérification de votre abonnement*"
-    
-    if edit:
-        msg = await message.edit_text(verify_text, parse_mode='Markdown')
-    else:
-        msg = await message.reply_text(verify_text, parse_mode='Markdown')
+    msg = await update.message.reply_text(verify_text, parse_mode='Markdown')
     
     # Animation stylisée (cercle qui tourne) - version accélérée
     emojis = ["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"]
@@ -112,7 +97,7 @@ async def _animated_subscription_check(message, user_id, username, context=None,
         
         # Lancer la vérification du parrainage si le contexte est fourni
         if context:
-            await animated_referral_check(update.message if hasattr(update, 'message') else message, user_id, username, context)
+            await animated_referral_check(update.message, user_id, username, context)
             
         return True
     else:
@@ -212,8 +197,8 @@ async def animated_referral_check(message, user_id, username, context=None, edit
         await asyncio.sleep(0.3)
     
     # Effectuer la vérification (fonction modifiée pour inclure le nom d'utilisateur)
+    # Les administrateurs sont automatiquement vérifiés dans has_completed_referrals
     has_completed = await has_completed_referrals(user_id, username)
-    
     if has_completed:
         # Animation de succès - version accélérée
         success_frames = [
@@ -230,7 +215,6 @@ async def animated_referral_check(message, user_id, username, context=None, edit
             await msg.edit_text(frame, parse_mode='Markdown')
             await asyncio.sleep(0.1)
         
-        # Message final de succès
         # Message final de succès
         await msg.edit_text(
             "✅ *Parrainage complété!*\n\n"
@@ -345,14 +329,35 @@ async def verify_before_game(update: Update, context: ContextTypes.DEFAULT_TYPE,
     user_id = update.effective_user.id
     username = update.effective_user.username
     
-    # Vérifier les conditions d'accès
+    # Vérifier d'abord si c'est un admin
+    if await is_admin(user_id, username):
+        # Si c'est un admin, lancer directement le jeu
+        await game_function(update, context)
+        return
+    
+    # Vérifier les conditions d'accès pour les non-admin
     if await verify_all_requirements(user_id, username, update.effective_message, context):
         # Si tout est validé, lance le jeu demandé
         await game_function(update, context)
-
-# Affichage du menu principal des jeux
+        # Affichage du menu principal des jeux
 async def show_games_menu(message: Message, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Affiche le menu principal avec tous les jeux disponibles."""
+    # Vérifier si c'est un admin
+    user_id = None
+    username = None
+    
+    if hasattr(message, 'from_user'):
+        user_id = message.from_user.id
+        username = message.from_user.username
+    elif context and context.user_data and "user_id" in context.user_data:
+        user_id = context.user_data["user_id"]
+        username = context.user_data.get("username", None)
+    
+    # Vérifier le statut admin si on a l'ID
+    admin_status = False
+    if user_id:
+        admin_status = await is_admin(user_id, username)
+    
     # Texte du menu amélioré
     menu_text = (
         "🎮 *FIFA GAMES - Menu Principal* 🎮\n\n"
@@ -374,8 +379,27 @@ async def show_games_menu(message: Message, context: ContextTypes.DEFAULT_TYPE) 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Envoi du message avec animation
     try:
+        if admin_status:
+            # Affichage direct pour les admins
+            logger.info(f"Affichage direct du menu pour l'admin {username} (ID: {user_id})")
+            if hasattr(message, 'edit_text'):
+                # Si c'est un message éditable (callback)
+                await message.edit_text(
+                    menu_text,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            else:
+                # Sinon, répondre avec un nouveau message
+                await message.reply_text(
+                    menu_text,
+                    reply_markup=reply_markup,
+                    parse_mode='Markdown'
+                )
+            return
+        
+        # Envoi du message avec animation pour les non-admins
         # Animation de transition vers le menu des jeux
         transition_frames = [
             "🎲 *Chargement des jeux...*",
@@ -412,6 +436,7 @@ async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, ca
     # Vérification rapide si c'est un admin
     if await is_admin(user_id, username):
         # Si c'est un admin, exécuter directement la fonction callback
+        logger.info(f"Accès direct au callback pour l'administrateur {username} (ID: {user_id})")
         await callback_function(update, context)
         return
         

@@ -58,16 +58,19 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     callback_data = query.data
     
+    # Vérifier si c'est un admin (importation tardive pour éviter les imports circulaires)
+    try:
+        from verification import is_admin
+        user_id = query.from_user.id
+        username = query.from_user.username
+        admin_status = await is_admin(user_id, username)
+    except ImportError:
+        admin_status = False
+    
     if callback_data == "fifa_select_teams":
         # Lancer la sélection des équipes
         context.user_data["selecting_team1"] = True
         await start_team_selection(query.message, context, edit=True)
-    
-    elif callback_data.startswith("teams_page_"):
-        # Gestion de la pagination pour les équipes
-        page = int(callback_data.split("_")[-1])
-        is_team1 = context.user_data.get("selecting_team1", True)
-        await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
     
     elif callback_data.startswith("select_team1_"):
         # Extraire le nom de l'équipe 1
@@ -256,24 +259,35 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
     if not context.user_data.get("awaiting_odds_team1", False):
         return ConversationHandler.END
     
-    # Importer la vérification d'abonnement et de parrainage de manière "tardive"
-    from database import check_user_subscription
-    from referral_system import has_completed_referrals
-    from verification import send_subscription_required, send_referral_required
-    
-    # Vérifier l'abonnement
+    # Vérifier si c'est un admin
     user_id = update.effective_user.id
-    is_subscribed = await check_user_subscription(user_id)
+    username = update.effective_user.username
     
-    if not is_subscribed:
-        await send_subscription_required(update.message)
-        return ConversationHandler.END
-    
-    # Vérifier le parrainage
-    has_completed_status = await has_completed_referrals(user_id)
-    if not has_completed_status:
-        await send_referral_required(update.message)
-        return ConversationHandler.END
+    # Importation tardive de is_admin pour éviter les imports circulaires
+    try:
+        from verification import is_admin
+        admin_status = await is_admin(user_id, username)
+        if admin_status:
+            # Si c'est un admin, pas besoin de vérifier d'autres conditions
+            logger.info(f"Bypass des vérifications pour l'admin {username} (ID: {user_id})")
+        else:
+            # Sinon, vérifier l'abonnement et le parrainage comme d'habitude
+            from database import check_user_subscription
+            from referral_system import has_completed_referrals
+            from verification import send_subscription_required, send_referral_required
+            
+            is_subscribed = await check_user_subscription(user_id)
+            if not is_subscribed:
+                await send_subscription_required(update.message)
+                return ConversationHandler.END
+            
+            has_completed_status = await has_completed_referrals(user_id, username)
+            if not has_completed_status:
+                await send_referral_required(update.message)
+                return ConversationHandler.END
+    except ImportError:
+        # Si on ne peut pas importer is_admin, continuer comme d'habitude
+        pass
     
     user_input = update.message.text.strip()
     team1 = context.user_data.get("team1", "")
@@ -324,31 +338,41 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         return ODDS_INPUT_TEAM1
-
-# Gestionnaire pour la saisie de la cote de l'équipe 2
+        # Gestionnaire pour la saisie de la cote de l'équipe 2
 async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Gère la saisie de la cote pour la deuxième équipe."""
     if not context.user_data.get("awaiting_odds_team2", False):
         return ConversationHandler.END
     
-    # Importer la vérification d'abonnement et de parrainage de manière "tardive"
-    from database import check_user_subscription
-    from referral_system import has_completed_referrals
-    from verification import send_subscription_required, send_referral_required
-    
-    # Vérifier l'abonnement
+    # Vérifier si c'est un admin
     user_id = update.effective_user.id
-    is_subscribed = await check_user_subscription(user_id)
+    username = update.effective_user.username
     
-    if not is_subscribed:
-        await send_subscription_required(update.message)
-        return ConversationHandler.END
-    
-    # Vérifier le parrainage
-    has_completed_status = await has_completed_referrals(user_id)
-    if not has_completed_status:
-        await send_referral_required(update.message)
-        return ConversationHandler.END
+    # Importation tardive de is_admin pour éviter les imports circulaires
+    try:
+        from verification import is_admin
+        admin_status = await is_admin(user_id, username)
+        if admin_status:
+            # Si c'est un admin, pas besoin de vérifier d'autres conditions
+            logger.info(f"Bypass des vérifications pour l'admin {username} (ID: {user_id})")
+        else:
+            # Sinon, vérifier l'abonnement et le parrainage comme d'habitude
+            from database import check_user_subscription
+            from referral_system import has_completed_referrals
+            from verification import send_subscription_required, send_referral_required
+            
+            is_subscribed = await check_user_subscription(user_id)
+            if not is_subscribed:
+                await send_subscription_required(update.message)
+                return ConversationHandler.END
+            
+            has_completed_status = await has_completed_referrals(user_id, username)
+            if not has_completed_status:
+                await send_referral_required(update.message)
+                return ConversationHandler.END
+    except ImportError:
+        # Si on ne peut pas importer is_admin, continuer comme d'habitude
+        pass
     
     user_input = update.message.text.strip()
     team1 = context.user_data.get("team1", "")
@@ -486,10 +510,22 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         return ODDS_INPUT_TEAM2
-        # Cette fonction est appelée depuis fifa_games.py pour traiter les messages entrants
+
+# Cette fonction est appelée depuis fifa_games.py pour traiter les messages entrants
 # concernant les cotes pour FIFA
 async def handle_fifa_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
     """Traite les messages liés au jeu FIFA."""
+    # Vérifier si c'est un admin (importation tardive pour éviter les imports circulaires)
+    try:
+        from verification import is_admin
+        user_id = update.effective_user.id
+        username = update.effective_user.username
+        admin_status = await is_admin(user_id, username)
+        if admin_status:
+            logger.info(f"Traitement du message avec droits d'admin pour {username} (ID: {user_id})")
+    except ImportError:
+        pass
+        
     # Vérifier si nous attendons une cote
     if context.user_data.get("awaiting_odds_team1", False):
         return await handle_odds_team1_input(update, context)

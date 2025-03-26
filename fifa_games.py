@@ -70,6 +70,11 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     """Gère les callbacks du jeu FIFA 4x4."""
     query = update.callback_query
     callback_data = query.data
+    user_id = query.from_user.id
+    username = query.from_user.username
+    
+    # Vérifier si c'est un admin (permet de contourner les vérifications)
+    admin_status = await is_admin(user_id, username)
     
     if callback_data == "fifa_select_teams":
         # Lancer la sélection des équipes
@@ -275,14 +280,17 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
     if not context.user_data.get("awaiting_odds_team1", False):
         return ConversationHandler.END
     
-    # Vérifier l'abonnement
+    # Vérifier si c'est un admin d'abord
     user_id = update.effective_user.id
     username = update.effective_user.username
+    admin_status = await is_admin(user_id, username)
     
-    # Vérification rapide des conditions d'accès
-    is_subscribed = await verify_all_requirements(user_id, username, update.message, context)
-    if not is_subscribed:
-        return ConversationHandler.END
+    # Si c'est un admin, pas besoin de vérifications supplémentaires
+    if not admin_status:
+        # Vérification rapide des conditions d'accès pour les non-admin
+        is_verified = await verify_all_requirements(user_id, username, update.message, context)
+        if not is_verified:
+            return ConversationHandler.END
     
     user_input = update.message.text.strip()
     team1 = context.user_data.get("team1", "")
@@ -312,6 +320,7 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
         )
         
         # Demander la cote de l'équipe 2
+        # Demander la cote de l'équipe 2
         await asyncio.sleep(0.5)
         await loading_message.edit_text(
             f"💰 *Saisie des cotes (obligatoire)*\n\n"
@@ -340,14 +349,17 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
     if not context.user_data.get("awaiting_odds_team2", False):
         return ConversationHandler.END
     
-    # Vérifier l'abonnement
+    # Vérifier si c'est un admin d'abord
     user_id = update.effective_user.id
     username = update.effective_user.username
+    admin_status = await is_admin(user_id, username)
     
-    # Vérification rapide des conditions d'accès
-    is_subscribed = await verify_all_requirements(user_id, username, update.message, context)
-    if not is_subscribed:
-        return ConversationHandler.END
+    # Si c'est un admin, pas besoin de vérifications supplémentaires
+    if not admin_status:
+        # Vérification rapide des conditions d'accès pour les non-admin
+        is_verified = await verify_all_requirements(user_id, username, update.message, context)
+        if not is_verified:
+            return ConversationHandler.END
     
     user_input = update.message.text.strip()
     team1 = context.user_data.get("team1", "")
@@ -490,73 +502,3 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         return BACCARAT_INPUT
-
-# Gestionnaire des messages pour les différents jeux
-async def handle_game_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
-    """Traite les messages spécifiques aux jeux."""
-    # Vérifier si c'est un message pour Baccarat (tour #)
-    if context.user_data.get("awaiting_baccarat_tour", False):
-        return await handle_baccarat_tour_input(update, context)
-    
-    # Vérifier si c'est un message pour FIFA (cotes équipe 1)
-    if context.user_data.get("awaiting_odds_team1", False):
-        return await handle_odds_team1_input(update, context)
-    
-    # Vérifier si c'est un message pour FIFA (cotes équipe 2)
-    if context.user_data.get("awaiting_odds_team2", False):
-        return await handle_odds_team2_input(update, context)
-    
-    # Sinon, traiter comme un message normal
-    return await handle_message(update, context)
-
-# Fonction principale pour démarrer le bot
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Point d'entrée personnalisé depuis fifa_games.py"""
-    await bot_start(update, context)
-
-# Fonction principale
-def main() -> None:
-    """Démarre le bot."""
-    try:
-        # Créer l'application
-        application = Application.builder().token(TELEGRAM_TOKEN).build()
-
-        # Ajouter les gestionnaires de commandes
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("games", show_games_menu))
-        application.add_handler(CommandHandler("check", animated_subscription_check))
-        application.add_handler(CommandHandler("referral", referral_command))
-        
-        # Gestionnaire de conversation pour Baccarat
-        baccarat_conv_handler = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(handle_baccarat_callback, pattern="^baccarat_")
-            ],
-            states={
-                BACCARAT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_baccarat_tour_input)]
-            },
-            fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
-        )
-        application.add_handler(baccarat_conv_handler)
-        
-        # Ajouter le gestionnaire pour les clics sur les boutons
-        application.add_handler(CallbackQueryHandler(button_callback))
-        
-        # Ajouter le gestionnaire pour les messages normaux
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages))
-        
-        # Ajouter le gestionnaire d'erreurs
-        application.add_error_handler(error_handler)
-
-        # Démarrer le bot
-        logger.info(f"Bot démarré avec le token: {TELEGRAM_TOKEN[:5]}...")
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
-        
-    except Exception as e:
-        logger.critical(f"ERREUR CRITIQUE lors du démarrage du bot: {e}")
-        import traceback
-        logger.critical(traceback.format_exc())
-
-if __name__ == '__main__':
-    main()

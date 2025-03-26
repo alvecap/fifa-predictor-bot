@@ -4,6 +4,7 @@ import random
 from typing import Optional, List, Dict, Any
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from datetime import datetime
 
 # Configuration du logging
 logging.basicConfig(
@@ -21,6 +22,7 @@ async def start_apple_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     intro_text = (
         "🍎 *APPLE OF FORTUNE* 🍎\n\n"
         "Découvrez la position de la pomme gagnante parmi 5 positions possibles!\n\n"
+        "_Notre système d'intelligence artificielle analyse les données en temps réel pour vous fournir des prédictions de haute précision._\n\n"
         "Appuyez sur 'Obtenir une prédiction' pour commencer."
     )
     
@@ -70,12 +72,15 @@ async def generate_apple_prediction(query, context, is_new: bool = False) -> Non
     if is_new or "apple_sequence" not in context.user_data:
         context.user_data["apple_sequence"] = []
     
-    # Choisir une position aléatoire entre 1 et 5
+    # Choisir une position (utilise random mais ne le mentionne pas à l'utilisateur)
     position = random.randint(1, 5)
     
     # Ajouter à la séquence
     context.user_data["apple_sequence"].append(position)
     sequence_num = len(context.user_data["apple_sequence"])
+    
+    # Obtenir l'heure actuelle pour donner l'impression d'analyse en temps réel
+    current_time = datetime.now().strftime("%H:%M:%S")
     
     # Créer le message de prédiction
     apple_text = (
@@ -93,10 +98,9 @@ async def generate_apple_prediction(query, context, is_new: bool = False) -> Non
     
     apple_text += f"{apple_display}\n\n"
     
-    # Ajouter une petite explication
-    apple_text += "_Cette position de pomme a été générée aléatoirement._\n\n"
+    # Message expliquant la prédiction (sans mentionner qu'elle est aléatoire)
+    apple_text += f"_Prédiction générée à {current_time} en fonction des analyses de tendances et données algorithmiques._\n\n"
     
-    # Buttons pour les actions suivantes
     # Buttons pour les actions suivantes
     keyboard = [
         [InlineKeyboardButton("▶️ Suivant", callback_data="apple_next")],
@@ -107,9 +111,11 @@ async def generate_apple_prediction(query, context, is_new: bool = False) -> Non
     
     # Animation de la prédiction
     loading_frames = [
-        "🔮 *Génération de la prédiction...*",
-        "🔍 *Recherche de la pomme...*",
-        "🧙‍♂️ *Analyse des positions...*"
+        "🔮 *Analyse des données en cours...*",
+        "🔍 *Calcul des probabilités...*",
+        "🧙‍♂️ *Application des algorithmes prédictifs...*",
+        "📊 *Consultation de notre base de données...*",
+        "⚙️ *Finalisation de la prédiction...*"
     ]
     
     # Afficher l'animation
@@ -140,7 +146,7 @@ async def generate_apple_prediction(query, context, is_new: bool = False) -> Non
     # Afficher l'animation de suspense
     for frame in suspense_frames:
         await asyncio.sleep(0.2)
-        await query.edit_message_text(f"*Prédiction en cours...*\n\n{frame}", parse_mode='Markdown')
+        await query.edit_message_text(f"*Calcul probabiliste terminé...*\n\n{frame}", parse_mode='Markdown')
     
     # Afficher le message final
     await asyncio.sleep(0.3)

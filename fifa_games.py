@@ -36,7 +36,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# États de conversation pour le Baccarat
+# États de conversation pour les jeux
 BACCARAT_INPUT = 1
 
 # Fonction principale pour le jeu FIFA 4x4
@@ -73,7 +73,7 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = query.from_user.id
     username = query.from_user.username
     
-    # Vérifier si c'est un admin (permet de contourner les vérifications)
+    # Vérifier si l'utilisateur est admin (pas besoin de vérifications supplémentaires pour les admins)
     admin_status = await is_admin(user_id, username)
     
     if callback_data == "fifa_select_teams":
@@ -154,6 +154,27 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await start_fifa_game(update, context)
     
     return None
+
+# Gestionnaire de sélection du jeu depuis le menu principal
+async def handle_game_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gère la sélection d'un jeu depuis le menu principal."""
+    query = update.callback_query
+    data = query.data
+    
+    await query.answer()  # Répondre au callback query
+    
+    if data == "game_fifa":
+        # Lancer le jeu FIFA
+        await start_fifa_game(update, context)
+    elif data == "game_apple":
+        # Lancer le jeu Apple of Fortune
+        await start_apple_game(update, context)
+    elif data == "game_baccarat":
+        # Lancer le jeu Baccarat
+        await start_baccarat_game(update, context)
+    else:
+        # Commande inconnue, retour au menu
+        await show_games_menu(query.message, context)
 
 # Fonction pour démarrer la sélection des équipes (première équipe)
 async def start_team_selection(message, context, edit=False, page=0) -> None:
@@ -297,6 +318,7 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
     team2 = context.user_data.get("team2", "")
     
     # Extraire la cote
+    # Extraire la cote
     try:
         odds1 = float(user_input.replace(",", "."))
         
@@ -319,7 +341,6 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         
-        # Demander la cote de l'équipe 2
         # Demander la cote de l'équipe 2
         await asyncio.sleep(0.5)
         await loading_message.edit_text(
@@ -509,8 +530,10 @@ async def handle_game_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     username = update.effective_user.username
     
-    # Faciliter l'accès aux admins sans vérifications
+    # Vérifier le statut admin
     admin_status = await is_admin(user_id, username)
+    if admin_status:
+        logger.info(f"Utilisateur administrateur détecté: {username} (ID: {user_id})")
     
     # Vérifier si c'est un message pour Baccarat (tour #)
     if context.user_data.get("awaiting_baccarat_tour", False):
@@ -530,6 +553,17 @@ async def handle_game_messages(update: Update, context: ContextTypes.DEFAULT_TYP
 # Fonction principale pour démarrer le bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Point d'entrée personnalisé depuis fifa_games.py"""
+    # Sauvegarder l'ID utilisateur dans le contexte
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    context.user_data["user_id"] = user_id
+    context.user_data["username"] = username
+    
+    # Vérifier si c'est un admin
+    admin_status = await is_admin(user_id, username)
+    if admin_status:
+        logger.info(f"Démarrage avec droits d'administrateur: {username} (ID: {user_id})")
+    
     await bot_start(update, context)
 
 # Fonction principale
@@ -543,29 +577,32 @@ def main() -> None:
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
         application.add_handler(CommandHandler("games", show_games_menu))
-        application.add_handler(CommandHandler("check", animated_subscription_check))
+        application.add_handler(CommandHandler("check", lambda u, c: animated_subscription_check(u, c)))
         application.add_handler(CommandHandler("referral", referral_command))
         
-        # Gestionnaire de conversation pour Baccarat
-        baccarat_conv_handler = ConversationHandler(
-            entry_points=[
-                CallbackQueryHandler(handle_baccarat_callback, pattern="^baccarat_")
-            ],
-            states={
-                BACCARAT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_baccarat_tour_input)]
-            },
-            fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
-        )
-        application.add_handler(baccarat_conv_handler)
-        
-        # Ajouter le gestionnaire pour les clics sur les boutons
-        # Wrapping callback_query_handler avec verify_callback pour les callbacks spécifiques
+        # Gestionnaire pour la sélection des jeux dans le menu
         application.add_handler(CallbackQueryHandler(
-            lambda u, c: verify_callback(u, c, handle_fifa_callback), 
+            lambda u, c: verify_callback(u, c, handle_game_selection),
+            pattern="^game_"
+        ))
+        
+        # Gestionnaires pour les callbacks spécifiques aux jeux
+        application.add_handler(CallbackQueryHandler(
+            lambda u, c: verify_callback(u, c, handle_fifa_callback),
             pattern="^fifa_"
         ))
         
-        # Gestionnaire pour les callbacks non-spécifiques
+        application.add_handler(CallbackQueryHandler(
+            lambda u, c: verify_callback(u, c, handle_apple_callback),
+            pattern="^apple_"
+        ))
+        
+        application.add_handler(CallbackQueryHandler(
+            lambda u, c: verify_callback(u, c, handle_baccarat_callback),
+            pattern="^baccarat_"
+        ))
+        
+        # Gestionnaire pour les autres callbacks (comme show_games, verify_subscription, etc.)
         application.add_handler(CallbackQueryHandler(button_callback))
         
         # Ajouter le gestionnaire pour les messages normaux

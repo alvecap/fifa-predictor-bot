@@ -6,6 +6,7 @@ from telegram.error import TelegramError
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from config import TELEGRAM_TOKEN, CREDENTIALS_FILE, SPREADSHEET_ID
+from admin_access import is_admin
 
 # Configuration du logging
 logging.basicConfig(
@@ -43,16 +44,11 @@ async def register_user(user_id, username, referrer_id=None):
         bool: True si l'opération a réussi, False sinon
     """
     try:
-        # Vérifier si on a affaire à un admin
-        try:
-            from verification import is_admin
-            if await is_admin(user_id, username):
-                logger.info(f"Enregistrement d'un administrateur: {username} (ID: {user_id})")
-                # Les admins n'ont pas besoin d'être enregistrés pour les parrainages
-                return True
-        except ImportError:
-            # Continue normalement si on ne peut pas importer is_admin
-            pass
+        # Vérifier si c'est un admin
+        if is_admin(user_id, username):
+            logger.info(f"Enregistrement d'un administrateur: {username} (ID: {user_id})")
+            # Les admins n'ont pas besoin d'être enregistrés pour les parrainages
+            return True
             
         # Connexion à Google Sheets
         spreadsheet = connect_to_sheets()
@@ -110,16 +106,11 @@ async def create_referral_relationship(user_id, referrer_id):
         referrer_id (int): ID Telegram du parrain
     """
     try:
-        # Vérifier si on a affaire à un admin
-        try:
-            from verification import is_admin
-            if await is_admin(user_id) or await is_admin(referrer_id):
-                logger.info(f"Relation de parrainage impliquant un admin. ID Utilisateur: {user_id}, ID Parrain: {referrer_id}")
-                # Les admins n'ont pas besoin de relations de parrainage
-                return
-        except ImportError:
-            # Continue normalement si on ne peut pas importer is_admin
-            pass
+        # Vérifier si un des utilisateurs est admin
+        if is_admin(user_id) or is_admin(referrer_id):
+            logger.info(f"Relation de parrainage impliquant un admin. ID Utilisateur: {user_id}, ID Parrain: {referrer_id}")
+            # Les admins n'ont pas besoin de relations de parrainage
+            return
             
         # Connexion à Google Sheets
         spreadsheet = connect_to_sheets()
@@ -212,14 +203,9 @@ async def check_channel_subscription(user_id, channel_id="@alvecapitalofficiel")
     """
     try:
         # Vérifier si c'est un admin
-        try:
-            from verification import is_admin
-            if await is_admin(user_id):
-                logger.info(f"Vérification d'abonnement contournée pour l'admin (ID: {user_id})")
-                return True
-        except ImportError:
-            # Continue normalement si on ne peut pas importer is_admin
-            pass
+        if is_admin(user_id):
+            logger.info(f"Vérification d'abonnement contournée pour l'admin (ID: {user_id})")
+            return True
             
         bot = Bot(token=TELEGRAM_TOKEN)
         
@@ -248,20 +234,57 @@ async def has_completed_referrals(user_id, username=None):
     """
     try:
         # Vérifier si c'est un admin
-        try:
-            from verification import is_admin
-            if await is_admin(user_id, username):
-                logger.info(f"Vérification de parrainage contournée pour l'admin {username} (ID: {user_id})")
-                return True
-        except ImportError:
-            # Continue normalement si on ne peut pas importer is_admin
-            pass
+        if is_admin(user_id, username):
+            logger.info(f"Vérification de parrainage contournée pour l'admin {username} (ID: {user_id})")
+            return True
         
         referral_count = await count_referrals(user_id)
         return referral_count >= MAX_REFERRALS
     except Exception as e:
         logger.error(f"Erreur lors de la vérification des parrainages: {e}")
         return False
+
+async def count_referrals(user_id):
+    """
+    Compte le nombre de parrainages vérifiés pour un utilisateur.
+    
+    Args:
+        user_id (int): ID Telegram de l'utilisateur
+        
+    Returns:
+        int: Le nombre de parrainages vérifiés
+    """
+    try:
+        # Vérifier si c'est un admin
+        if is_admin(user_id):
+            logger.info(f"Comptage de parrainage contourné pour l'admin (ID: {user_id})")
+            # Pour un admin, on retourne un nombre suffisant pour valider
+            return MAX_REFERRALS
+        
+        # Connexion à Google Sheets
+        spreadsheet = connect_to_sheets()
+        
+        try:
+            referrals_sheet = spreadsheet.worksheet("Parrainages")
+            
+            # Récupérer tous les parrainages
+            referrals = referrals_sheet.get_all_values()
+            
+            # Compter les parrainages vérifiés où l'utilisateur est le parrain
+            count = 0
+            for row in referrals[1:]:  # Ignorer l'en-tête
+                if len(row) >= 4 and row[0] == str(user_id) and row[3] == "Oui":
+                    count += 1
+            
+            return count
+        
+        except gspread.exceptions.WorksheetNotFound:
+            # La feuille n'existe pas, donc aucun parrainage
+            return 0
+    
+    except Exception as e:
+        logger.error(f"Erreur lors du comptage des parrainages: {e}")
+        return 0
 
 async def get_referred_users(user_id):
     """
@@ -275,15 +298,10 @@ async def get_referred_users(user_id):
     """
     try:
         # Vérifier si c'est un admin
-        try:
-            from verification import is_admin
-            if await is_admin(user_id):
-                logger.info(f"Récupération des parrainages contournée pour l'admin (ID: {user_id})")
-                # Pour un admin, on retourne une liste vide
-                return []
-        except ImportError:
-            # Continue normalement si on ne peut pas importer is_admin
-            pass
+        if is_admin(user_id):
+            logger.info(f"Récupération des parrainages contournée pour l'admin (ID: {user_id})")
+            # Pour un admin, on retourne une liste vide
+            return []
         
         # Connexion à Google Sheets
         spreadsheet = connect_to_sheets()
@@ -363,7 +381,7 @@ def get_referral_instructions():
     return (
         "*📋 Conditions pour qu'un parrainage soit validé:*\n\n"
         "1️⃣ *L'invité doit cliquer sur votre lien de parrainage*\n"
-        "2️⃣ *L'invité doit démarrer le bot*\n"
+        "2️⃣ *L'invité doit démarrer le bot* avec la commande /start\n"
         "3️⃣ *L'invité doit s'abonner* au canal [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n\n"
         "_Note: Le parrainage sera automatiquement vérifié et validé une fois ces conditions remplies_"
     )

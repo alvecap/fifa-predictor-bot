@@ -655,6 +655,9 @@ async def games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = update.effective_user.id
     username = update.effective_user.username
     
+    # Pour tout le monde, afficher directement le menu des jeux
+    await show_games_menu(update.message, context)
+    
     # Vérifier si c'est un admin
     admin_status = is_admin(user_id, username)
     if admin_status:

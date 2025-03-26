@@ -25,7 +25,7 @@ from referral_system import (
 )
 
 # Import des modules de jeux spécifiques
-from fifa_bot import start as bot_start, help_command, referral_command, button_callback, handle_message, error_handler
+from fifa_bot import start as bot_start, help_command, referral_command, button_callback as fifa_button_callback, handle_message, error_handler
 from games.apple_game import start_apple_game, handle_apple_callback
 from games.baccarat_game import start_baccarat_game, handle_baccarat_callback, handle_baccarat_tour_input
 
@@ -38,6 +38,35 @@ logger = logging.getLogger(__name__)
 
 # États de conversation pour les jeux
 BACCARAT_INPUT = 1
+
+# Gestionnaire de sélection du jeu depuis le menu principal
+async def handle_game_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gère la sélection d'un jeu depuis le menu principal."""
+    query = update.callback_query
+    user_id = query.from_user.id
+    username = query.from_user.username
+    data = query.data
+    
+    # Log pour le debugging
+    logger.info(f"Sélection de jeu: {data} par utilisateur {username} (ID: {user_id})")
+    
+    await query.answer()  # Répondre au callback query
+    
+    if data == "game_fifa":
+        # Lancer le jeu FIFA
+        await start_fifa_game(update, context)
+    elif data == "game_apple":
+        # Lancer le jeu Apple of Fortune
+        await start_apple_game(update, context)
+    elif data == "game_baccarat":
+        # Lancer le jeu Baccarat
+        await start_baccarat_game(update, context)
+    elif data == "show_games":
+        # Afficher le menu des jeux
+        await show_games_menu(query.message, context)
+    else:
+        # Commande inconnue, retour au menu
+        await show_games_menu(query.message, context)
 
 # Fonction principale pour le jeu FIFA 4x4
 async def start_fifa_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -75,6 +104,11 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     
     # Vérifier si l'utilisateur est admin (pas besoin de vérifications supplémentaires pour les admins)
     admin_status = await is_admin(user_id, username)
+    
+    if callback_data == "show_games":
+        # Retour au menu principal des jeux
+        await show_games_menu(query.message, context)
+        return None
     
     if callback_data == "fifa_select_teams":
         # Lancer la sélection des équipes
@@ -154,27 +188,6 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await start_fifa_game(update, context)
     
     return None
-
-# Gestionnaire de sélection du jeu depuis le menu principal
-async def handle_game_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Gère la sélection d'un jeu depuis le menu principal."""
-    query = update.callback_query
-    data = query.data
-    
-    await query.answer()  # Répondre au callback query
-    
-    if data == "game_fifa":
-        # Lancer le jeu FIFA
-        await start_fifa_game(update, context)
-    elif data == "game_apple":
-        # Lancer le jeu Apple of Fortune
-        await start_apple_game(update, context)
-    elif data == "game_baccarat":
-        # Lancer le jeu Baccarat
-        await start_baccarat_game(update, context)
-    else:
-        # Commande inconnue, retour au menu
-        await show_games_menu(query.message, context)
 
 # Fonction pour démarrer la sélection des équipes (première équipe)
 async def start_team_selection(message, context, edit=False, page=0) -> None:
@@ -307,6 +320,7 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
     admin_status = await is_admin(user_id, username)
     
     # Si c'est un admin, pas besoin de vérifications supplémentaires
+    # Si c'est un admin, pas besoin de vérifications supplémentaires
     if not admin_status:
         # Vérification rapide des conditions d'accès pour les non-admin
         is_verified = await verify_all_requirements(user_id, username, update.message, context)
@@ -317,7 +331,6 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
     team1 = context.user_data.get("team1", "")
     team2 = context.user_data.get("team2", "")
     
-    # Extraire la cote
     # Extraire la cote
     try:
         odds1 = float(user_input.replace(",", "."))
@@ -523,17 +536,97 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         return BACCARAT_INPUT
-        # Gestionnaire des messages pour les différents jeux
+        # Gestionnaire principal des callbacks pour diriger vers les handlers spécifiques
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Gère les callbacks des boutons et redirige vers les handlers appropriés."""
+    query = update.callback_query
+    data = query.data
+    user_id = query.from_user.id
+    username = query.from_user.username
+    
+    # Stocker les informations utilisateur dans le contexte
+    context.user_data["user_id"] = user_id
+    context.user_data["username"] = username
+    
+    # Log pour debugging
+    logger.info(f"Callback reçu: {data} de l'utilisateur {username} (ID: {user_id})")
+    
+    # Vérifier si c'est un admin
+    admin_status = await is_admin(user_id, username)
+    if admin_status:
+        logger.info(f"Accès admin détecté pour {username} (ID: {user_id})")
+    
+    # Traiter les callbacks selon leur préfixe
+    if data.startswith("game_"):
+        # Callbacks pour sélection de jeu
+        await handle_game_selection(update, context)
+    elif data.startswith("fifa_"):
+        # Callbacks spécifiques au jeu FIFA
+        await handle_fifa_callback(update, context)
+    elif data.startswith("apple_"):
+        # Callbacks spécifiques au jeu Apple of Fortune
+        await handle_apple_callback(update, context)
+    elif data.startswith("baccarat_"):
+        # Callbacks spécifiques au jeu Baccarat
+        await handle_baccarat_callback(update, context)
+    elif data == "show_games":
+        # Afficher le menu principal des jeux
+        await show_games_menu(query.message, context)
+    elif data == "verify_subscription":
+        # Vérification d'abonnement
+        await animated_subscription_check(update, context)
+    elif data == "verify_referral":
+        # Vérification de parrainage
+        await animated_referral_check(query.message, user_id, username, context, edit=True)
+    elif data == "get_referral_link":
+        # Générer et afficher un lien de parrainage
+        bot_info = await context.bot.get_me()
+        bot_username = bot_info.username
+        referral_link = await generate_referral_link(user_id, bot_username)
+        
+        # Obtenir le nombre actuel de parrainages
+        referral_count = await count_referrals(user_id)
+        
+        # Créer les boutons
+        keyboard = [
+            [InlineKeyboardButton("🔗 Copier le lien", callback_data="copy_referral_link")],
+            [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Message avec les instructions de parrainage
+        message_text = f"🔗 *Votre lien de parrainage:*\n\n`{referral_link}`\n\n"
+        message_text += f"_Progression: {referral_count}/{MAX_REFERRALS} parrainage(s)_\n\n"
+        message_text += get_referral_instructions()
+        
+        await query.edit_message_text(
+            message_text,
+            parse_mode='Markdown',
+            reply_markup=reply_markup,
+            disable_web_page_preview=True
+        )
+    elif data == "copy_referral_link":
+        # Telegram gère automatiquement la copie
+        await query.answer("Lien copié dans le presse-papier!")
+    else:
+        # Autres types de callbacks (traités par fifa_bot.py)
+        await fifa_button_callback(update, context)
+
+# Gestionnaire des messages pour les différents jeux
 async def handle_game_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Optional[int]:
     """Traite les messages spécifiques aux jeux."""
     # Vérifier si c'est un admin d'abord
     user_id = update.effective_user.id
     username = update.effective_user.username
     
+    # Stocker les informations utilisateur dans le contexte
+    context.user_data["user_id"] = user_id
+    context.user_data["username"] = username
+    
     # Vérifier le statut admin
     admin_status = await is_admin(user_id, username)
     if admin_status:
-        logger.info(f"Utilisateur administrateur détecté: {username} (ID: {user_id})")
+        logger.info(f"Message reçu de l'administrateur {username} (ID: {user_id})")
     
     # Vérifier si c'est un message pour Baccarat (tour #)
     if context.user_data.get("awaiting_baccarat_tour", False):
@@ -550,6 +643,28 @@ async def handle_game_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     # Sinon, traiter comme un message normal
     return await handle_message(update, context)
 
+# Gestionnaire de la commande /games
+async def games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Affiche le menu des jeux lorsque la commande /games est envoyée."""
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    
+    # Stocker les informations utilisateur dans le contexte
+    context.user_data["user_id"] = user_id
+    context.user_data["username"] = username
+    
+    # Vérifier si c'est un admin
+    admin_status = await is_admin(user_id, username)
+    if admin_status:
+        logger.info(f"Commande /games par l'administrateur {username} (ID: {user_id})")
+        # Les admins vont directement au menu des jeux
+        await show_games_menu(update.message, context)
+        return
+    
+    # Pour les non-admins, vérifier les prérequis
+    if await verify_all_requirements(user_id, username, update.message, context):
+        await show_games_menu(update.message, context)
+
 # Fonction principale pour démarrer le bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Point d'entrée personnalisé depuis fifa_games.py"""
@@ -562,8 +677,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Vérifier si c'est un admin
     admin_status = await is_admin(user_id, username)
     if admin_status:
-        logger.info(f"Démarrage avec droits d'administrateur: {username} (ID: {user_id})")
+        logger.info(f"Commande /start par l'administrateur {username} (ID: {user_id})")
     
+    # Traiter de la même manière que le bot standard
     await bot_start(update, context)
 
 # Fonction principale
@@ -576,33 +692,11 @@ def main() -> None:
         # Ajouter les gestionnaires de commandes
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("games", show_games_menu))
+        application.add_handler(CommandHandler("games", games_command))  # Commande directe pour les jeux
         application.add_handler(CommandHandler("check", lambda u, c: animated_subscription_check(u, c)))
         application.add_handler(CommandHandler("referral", referral_command))
         
-        # Gestionnaire pour la sélection des jeux dans le menu
-        application.add_handler(CallbackQueryHandler(
-            lambda u, c: verify_callback(u, c, handle_game_selection),
-            pattern="^game_"
-        ))
-        
-        # Gestionnaires pour les callbacks spécifiques aux jeux
-        application.add_handler(CallbackQueryHandler(
-            lambda u, c: verify_callback(u, c, handle_fifa_callback),
-            pattern="^fifa_"
-        ))
-        
-        application.add_handler(CallbackQueryHandler(
-            lambda u, c: verify_callback(u, c, handle_apple_callback),
-            pattern="^apple_"
-        ))
-        
-        application.add_handler(CallbackQueryHandler(
-            lambda u, c: verify_callback(u, c, handle_baccarat_callback),
-            pattern="^baccarat_"
-        ))
-        
-        # Gestionnaire pour les autres callbacks (comme show_games, verify_subscription, etc.)
+        # Gestionnaire pour tous les callbacks
         application.add_handler(CallbackQueryHandler(button_callback))
         
         # Ajouter le gestionnaire pour les messages normaux

@@ -135,7 +135,6 @@ async def generate_baccarat_prediction(message, tour_number: int, context: Conte
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     # Animation de la prédiction avec termes techniques
-    # Animation de la prédiction avec termes techniques
     loading_message = await message.reply_text("🔮 *Initialisation de l'analyse...*", parse_mode='Markdown')
     
     loading_frames = [

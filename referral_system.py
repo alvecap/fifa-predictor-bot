@@ -203,17 +203,28 @@ async def check_channel_subscription(user_id, channel_id="@alvecapitalofficiel")
         logger.error(f"Erreur lors de la vérification de l'abonnement: {e}")
         return False
 
-async def has_completed_referrals(user_id):
+async def has_completed_referrals(user_id, username=None):
     """
     Vérifie si l'utilisateur a atteint le nombre requis de parrainages.
     
     Args:
         user_id (int): ID Telegram de l'utilisateur
+        username (str, optional): Nom d'utilisateur Telegram pour vérification admin
         
     Returns:
-        bool: True si l'utilisateur a complété ses parrainages, False sinon
+        bool: True si l'utilisateur a complété ses parrainages ou est admin, False sinon
     """
     try:
+        # Vérifier d'abord si c'est un admin (importation tardive pour éviter les imports circulaires)
+        try:
+            from verification import is_admin
+            if await is_admin(user_id, username):
+                logger.info(f"Vérification de parrainage contournée pour l'administrateur {username} (ID: {user_id})")
+                return True
+        except ImportError:
+            # Si le module n'est pas disponible, continuer normalement
+            pass
+        
         referral_count = await count_referrals(user_id)
         return referral_count >= MAX_REFERRALS
     except Exception as e:

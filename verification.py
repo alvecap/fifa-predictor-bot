@@ -4,7 +4,8 @@ from typing import Optional, Callable, Any
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.ext import ContextTypes
 
-from database import check_user_subscription
+# Utiliser le nouvel adaptateur de base de données
+from database_adapter import check_user_subscription, has_completed_referrals, count_referrals, get_max_referrals
 from admin_access import is_admin
 
 # Configuration du logging
@@ -153,8 +154,8 @@ async def verify_referral(message, user_id, username, context=None, edit=False) 
     Returns:
         bool: True si l'utilisateur a complété ses parrainages ou est admin, False sinon
     """
-    # Importer ces fonctions ici pour éviter l'importation circulaire
-    from referral_system import has_completed_referrals, count_referrals, MAX_REFERRALS
+    # Récupérer MAX_REFERRALS
+    MAX_REFERRALS = await get_max_referrals()
     
     # Vérifier si c'est un admin
     if is_admin(user_id, username):
@@ -333,7 +334,7 @@ async def send_subscription_required(message) -> None:
 # Message standard quand le parrainage est requis
 async def send_referral_required(message) -> None:
     """Envoie un message indiquant que le parrainage est nécessaire."""
-    from referral_system import MAX_REFERRALS
+    MAX_REFERRALS = await get_max_referrals()
     
     keyboard = [
         [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
@@ -363,8 +364,6 @@ async def verify_all_requirements(user_id, username, message, context=None) -> b
     Returns:
         bool: True si l'utilisateur a accès (admin ou abonné+parrainé), False sinon
     """
-    from referral_system import has_completed_referrals
-    
     # Vérifier d'abord si c'est un admin
     if is_admin(user_id, username):
         logger.info(f"Vérification contournée pour l'administrateur {username} (ID: {user_id})")
@@ -383,3 +382,53 @@ async def verify_all_requirements(user_id, username, message, context=None) -> b
         return False
     
     return True
+
+# Fonction pour afficher le menu principal des jeux
+async def show_games_menu(message, context) -> None:
+    """
+    Affiche le menu principal avec tous les jeux disponibles.
+    Version simplifiée et robuste pour éviter les erreurs.
+    """
+    try:
+        # Texte du menu simplifié
+        menu_text = (
+            "🎮 *FIFA GAMES - Menu Principal* 🎮\n\n"
+            "Choisissez un jeu pour obtenir des prédictions :\n\n"
+            "🏆 *FIFA 4x4 Predictor*\n"
+            "_Prédictions précises basées sur des statistiques réelles_\n\n"
+            "🍎 *Apple of Fortune*\n"
+            "_Trouvez la bonne pomme grâce à notre système prédictif_\n\n"
+            "🃏 *Baccarat*\n"
+            "_Anticipez le gagnant avec notre technologie d'analyse_"
+        )
+        
+        # Boutons pour accéder aux différents jeux
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Message avec le menu
+        if hasattr(message, 'edit_text'):
+            await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await message.reply_text(menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+            
+    except Exception as e:
+        # Log complet de l'erreur
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Erreur détaillée dans show_games_menu: {error_trace}")
+        
+        # Message d'erreur avec plus de détails
+        error_message = f"Une erreur s'est produite lors du chargement du menu: {str(e)}"
+        logger.error(error_message)
+        
+        try:
+            await message.reply_text(
+                "Désolé, une erreur s'est produite lors du chargement du menu des jeux. Veuillez réessayer."
+            )
+        except Exception:
+            logger.error("Impossible d'envoyer le message d'erreur")

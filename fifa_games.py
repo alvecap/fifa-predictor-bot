@@ -28,6 +28,9 @@ from fifa_bot import start as bot_start, help_command, referral_command, handle_
 from games.apple_game import start_apple_game, handle_apple_callback
 from games.baccarat_game import start_baccarat_game, handle_baccarat_callback, handle_baccarat_tour_input
 
+# Import depuis l'adaptateur de base de données (correction)
+from database_adapter import get_all_teams, save_prediction_log
+
 # Configuration du logging
 logging.basicConfig(
     level=logging.INFO,
@@ -208,7 +211,7 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data["awaiting_odds_team1"] = True
         context.user_data["odds_for_match"] = f"{team1} vs {team2}"
         
-        return ConversationHandler.END
+        return ODDS_INPUT
     
     elif callback_data == "fifa_new_prediction":
         # Relancer une nouvelle prédiction
@@ -256,11 +259,13 @@ async def handle_game_selection(update: Update, context: ContextTypes.DEFAULT_TY
 async def start_team_selection(message, context, edit=False, page=0) -> None:
     """Affiche la première page de sélection d'équipe."""
     try:
-        from database import get_all_teams
         context.user_data["selecting_team1"] = True
         await show_teams_page(message, context, page, edit, is_team1=True)
     except Exception as e:
         logger.error(f"Erreur lors du démarrage de la sélection d'équipes: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
         if edit:
             await message.edit_text(
                 "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
@@ -275,70 +280,87 @@ async def start_team_selection(message, context, edit=False, page=0) -> None:
 # Fonction pour afficher une page d'équipes
 async def show_teams_page(message, context, page=0, edit=False, is_team1=True) -> None:
     """Affiche une page de la liste des équipes."""
-    from database import get_all_teams
-    
-    # Constantes pour la pagination des équipes
-    TEAMS_PER_PAGE = 8
-    
-    teams = get_all_teams()
-    
-    # Calculer le nombre total de pages
-    total_pages = (len(teams) + TEAMS_PER_PAGE - 1) // TEAMS_PER_PAGE
-    
-    # S'assurer que la page est valide
-    page = max(0, min(page, total_pages - 1))
-    
-    # Obtenir les équipes pour cette page
-    start_idx = page * TEAMS_PER_PAGE
-    end_idx = min(start_idx + TEAMS_PER_PAGE, len(teams))
-    page_teams = teams[start_idx:end_idx]
-    
-    # Créer les boutons pour les équipes
-    team_buttons = []
-    row = []
-    
-    callback_prefix = "select_team1_" if is_team1 else "select_team2_"
-    
-    for i, team in enumerate(page_teams):
-        row.append(InlineKeyboardButton(team, callback_data=f"{callback_prefix}{team}"))
-        if len(row) == 2 or i == len(page_teams) - 1:
-            team_buttons.append(row)
-            row = []
-    
-    # Ajouter les boutons de navigation
-    nav_buttons = []
-    
-    if page > 0:
-        nav_buttons.append(InlineKeyboardButton("◀️ Précédent", callback_data=f"teams_page_{page-1}"))
-    
-    if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton("Suivant ▶️", callback_data=f"teams_page_{page+1}"))
-    
-    if nav_buttons:
-        team_buttons.append(nav_buttons)
-    
-    # Ajouter bouton pour revenir en arrière si nécessaire
-    if not is_team1:
-        team_buttons.append([InlineKeyboardButton("◀️ Retour", callback_data="fifa_select_teams")])
-    else:
-        team_buttons.append([InlineKeyboardButton("🎮 Menu principal", callback_data="show_games")])
-    
-    reply_markup = InlineKeyboardMarkup(team_buttons)
-    
-    # Texte du message
-    team_type = "première" if is_team1 else "deuxième"
-    text = (
-        f"🏆 *Sélection des équipes* (Page {page+1}/{total_pages})\n\n"
-        f"Veuillez sélectionner la *{team_type} équipe* pour votre prédiction:"
-    )
-    
     try:
+        # Constantes pour la pagination des équipes
+        TEAMS_PER_PAGE = 8
+        
+        # Utiliser l'adaptateur de base de données pour récupérer les équipes
+        teams = get_all_teams()
+        
+        # Vérifier si des équipes ont été trouvées
+        if not teams:
+            logger.error("Aucune équipe trouvée dans la base de données")
+            error_message = "Aucune équipe disponible. Veuillez contacter l'administrateur."
+            
+            if edit:
+                await message.edit_text(error_message, parse_mode='Markdown')
+            else:
+                await message.reply_text(error_message, parse_mode='Markdown')
+            return
+            
+        logger.info(f"Nombre d'équipes trouvées: {len(teams)}")
+        logger.info(f"Premières équipes: {teams[:5] if len(teams) >= 5 else teams}")
+        
+        # Calculer le nombre total de pages
+        total_pages = (len(teams) + TEAMS_PER_PAGE - 1) // TEAMS_PER_PAGE
+        
+        # S'assurer que la page est valide
+        page = max(0, min(page, total_pages - 1))
+        
+        # Obtenir les équipes pour cette page
+        start_idx = page * TEAMS_PER_PAGE
+        end_idx = min(start_idx + TEAMS_PER_PAGE, len(teams))
+        page_teams = teams[start_idx:end_idx]
+        
+        # Créer les boutons pour les équipes
+        team_buttons = []
+        row = []
+        
+        callback_prefix = "select_team1_" if is_team1 else "select_team2_"
+        
+        for i, team in enumerate(page_teams):
+            row.append(InlineKeyboardButton(team, callback_data=f"{callback_prefix}{team}"))
+            if len(row) == 2 or i == len(page_teams) - 1:
+                team_buttons.append(row)
+                row = []
+        
+        # Ajouter les boutons de navigation
+        nav_buttons = []
+        
+        if page > 0:
+            nav_buttons.append(InlineKeyboardButton("◀️ Précédent", callback_data=f"teams_page_{page-1}"))
+        
+        if page < total_pages - 1:
+            nav_buttons.append(InlineKeyboardButton("Suivant ▶️", callback_data=f"teams_page_{page+1}"))
+        
+        if nav_buttons:
+            team_buttons.append(nav_buttons)
+        
+        # Ajouter bouton pour revenir en arrière si nécessaire
+        if not is_team1:
+            team_buttons.append([InlineKeyboardButton("◀️ Retour", callback_data="fifa_select_teams")])
+        else:
+            team_buttons.append([InlineKeyboardButton("🎮 Menu principal", callback_data="show_games")])
+        
+        reply_markup = InlineKeyboardMarkup(team_buttons)
+        
+        # Texte du message
+        team_type = "première" if is_team1 else "deuxième"
+        text = (
+            f"🏆 *Sélection des équipes* (Page {page+1}/{total_pages})\n\n"
+            f"Veuillez sélectionner la *{team_type} équipe* pour votre prédiction:"
+        )
+        
         if edit:
             await message.edit_text(text, reply_markup=reply_markup, parse_mode='Markdown')
         else:
             await message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+            
     except Exception as e:
         logger.error(f"Erreur lors de l'affichage des équipes: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
         if edit:
             await message.edit_text(
                 "Désolé, une erreur s'est produite. Veuillez réessayer ou contacter l'administrateur.",
@@ -557,8 +579,6 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             )
             
             # Enregistrer la prédiction dans les logs
-            from database import save_prediction_log
-            
             user_id = context.user_data.get("user_id", update.message.from_user.id)
             username = context.user_data.get("username", update.message.from_user.username)
             
@@ -575,6 +595,8 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             return ConversationHandler.END
         except Exception as e:
             logger.error(f"Erreur lors de la génération de la prédiction: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             
             # Proposer de réessayer en cas d'erreur
             keyboard = [

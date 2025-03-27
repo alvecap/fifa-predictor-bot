@@ -5,7 +5,7 @@ from telegram import Bot
 from telegram.error import TelegramError
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from config import TELEGRAM_TOKEN, CREDENTIALS_FILE, SPREADSHEET_ID
+from config import TELEGRAM_TOKEN, CREDENTIALS_FILE, SPREADSHEET_ID, MAX_REFERRALS, OFFICIAL_CHANNEL
 from admin_access import is_admin
 
 # Configuration du logging
@@ -14,9 +14,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Nombre maximum de parrainages requis
-MAX_REFERRALS = 1
 
 # Connexion à Google Sheets
 def connect_to_sheets():
@@ -76,17 +73,22 @@ async def register_user(user_id, username, referrer_id=None):
             # Si un parrain est spécifié et que ce n'est pas déjà enregistré, le mettre à jour
             if referrer_id and referrer_id != user_id:
                 current_referrer = users_sheet.cell(row_index, 5).value
+                # Vérifier si l'utilisateur a déjà un parrain
                 if not current_referrer:
                     users_sheet.update_cell(row_index, 5, str(referrer_id))
+                    logger.info(f"Parrain ajouté pour l'utilisateur {user_id}: {referrer_id}")
                     
                     # Créer la relation de parrainage
                     await create_referral_relationship(user_id, referrer_id)
+                elif current_referrer != str(referrer_id):
+                    logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {current_referrer}, ne pas changer le parrainage")
             
         except gspread.exceptions.CellNotFound:
             # Utilisateur non trouvé, ajout
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             new_row = [str(user_id), username or "Inconnu", current_time, current_time, str(referrer_id) if referrer_id and referrer_id != user_id else ""]
             users_sheet.append_row(new_row)
+            logger.info(f"Nouvel utilisateur enregistré: {username} (ID: {user_id})")
             
             # Si un parrain est spécifié, créer la relation de parrainage
             if referrer_id and referrer_id != user_id:
@@ -130,19 +132,38 @@ async def create_referral_relationship(user_id, referrer_id):
             referrals = referrals_sheet.get_all_values()
             relationship_exists = False
             
+            # Vérifier si le filleul est déjà parrainé par quelqu'un d'autre
+            other_referrer_exists = False
             for row in referrals[1:]:  # Ignorer l'en-tête
-                if len(row) >= 2 and row[0] == str(referrer_id) and row[1] == str(user_id):
-                    relationship_exists = True
+                if len(row) >= 2:
+                    # Vérifier si cette relation existe déjà
+                    if row[0] == str(referrer_id) and row[1] == str(user_id):
+                        relationship_exists = True
+                        break
+                    # Vérifier si le filleul est déjà parrainé par quelqu'un d'autre
+                    if row[1] == str(user_id) and row[0] != str(referrer_id):
+                        other_referrer_exists = True
+                        logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {row[0]}")
+            
+            # Vérifier s'il n'y a pas de boucle de parrainage (A parraine B qui parraine A)
+            boucle_parrainage = False
+            for row in referrals[1:]:  # Ignorer l'en-tête
+                if len(row) >= 2 and row[0] == str(user_id) and row[1] == str(referrer_id):
+                    boucle_parrainage = True
+                    logger.warning(f"Boucle de parrainage détectée: {user_id} et {referrer_id} se parrainent mutuellement")
                     break
             
-            if not relationship_exists:
+            if not relationship_exists and not other_referrer_exists and not boucle_parrainage:
                 # Créer la relation
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 new_row = [str(referrer_id), str(user_id), current_time, "Non", ""]
                 referrals_sheet.append_row(new_row)
+                logger.info(f"Relation de parrainage créée: Parrain {referrer_id} -> Filleul {user_id}")
                 
-                # Lancer la vérification d'abonnement en arrière-plan
+                # Lancer la vérification d'abonnement en arrière-plan avec un délai plus long
                 asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
+            elif relationship_exists:
+                logger.info(f"Relation de parrainage déjà existante: {referrer_id} -> {user_id}")
         
         except Exception as e:
             logger.error(f"Erreur lors de la recherche ou création de la relation de parrainage: {e}")
@@ -159,11 +180,12 @@ async def verify_and_update_referral(user_id, referrer_id):
         referrer_id (int): ID Telegram du parrain
     """
     try:
-        # Attendre un peu avant de vérifier (laisser le temps à l'utilisateur de s'abonner)
-        await asyncio.sleep(5)
+        # Attendre 30 secondes avant de vérifier (laisser plus de temps à l'utilisateur pour s'abonner)
+        await asyncio.sleep(30)
         
         # Vérifier l'abonnement
         is_subscribed = await check_channel_subscription(user_id)
+        logger.info(f"Vérification d'abonnement pour user {user_id}: {is_subscribed}")
         
         if is_subscribed:
             try:
@@ -173,6 +195,8 @@ async def verify_and_update_referral(user_id, referrer_id):
                 
                 # Trouver la relation de parrainage
                 referrals = referrals_sheet.get_all_values()
+                relationship_found = False
+                
                 for i, row in enumerate(referrals[1:], start=2):  # Start=2 pour tenir compte de l'en-tête
                     if len(row) >= 2 and row[0] == str(referrer_id) and row[1] == str(user_id):
                         # Mettre à jour le statut de vérification
@@ -180,7 +204,27 @@ async def verify_and_update_referral(user_id, referrer_id):
                         referrals_sheet.update_cell(i, 4, "Oui")
                         referrals_sheet.update_cell(i, 5, current_time)
                         logger.info(f"Parrainage vérifié: {referrer_id} -> {user_id}")
+                        relationship_found = True
+                        
+                        # Notification au parrain
+                        try:
+                            bot = Bot(token=TELEGRAM_TOKEN)
+                            referral_count = await count_referrals(referrer_id)
+                            
+                            await bot.send_message(
+                                chat_id=referrer_id,
+                                text=f"🎉 *Félicitations!* Un nouvel utilisateur a utilisé votre lien et s'est abonné au canal.\n\n"
+                                     f"Vous avez maintenant *{referral_count}/{MAX_REFERRALS}* parrainages vérifiés.",
+                                parse_mode='Markdown'
+                            )
+                            logger.info(f"Notification envoyée au parrain {referrer_id}")
+                        except Exception as e:
+                            logger.error(f"Erreur lors de l'envoi de la notification au parrain: {e}")
+                        
                         break
+                
+                if not relationship_found:
+                    logger.warning(f"Relation de parrainage non trouvée lors de la vérification: {referrer_id} -> {user_id}")
             
             except Exception as e:
                 logger.error(f"Erreur lors de la mise à jour du statut de parrainage: {e}")
@@ -190,13 +234,13 @@ async def verify_and_update_referral(user_id, referrer_id):
     except Exception as e:
         logger.error(f"Erreur lors de la vérification du parrainage: {e}")
 
-async def check_channel_subscription(user_id, channel_id="@alvecapitalofficiel"):
+async def check_channel_subscription(user_id, channel_id=None):
     """
     Vérifie si un utilisateur est abonné à un canal Telegram spécifique.
     
     Args:
         user_id (int): ID de l'utilisateur Telegram
-        channel_id (str): ID du canal à vérifier (par défaut "@alvecapitalofficiel")
+        channel_id (str): ID du canal à vérifier (utilise OFFICIAL_CHANNEL par défaut)
         
     Returns:
         bool: True si l'utilisateur est abonné ou admin, False sinon
@@ -207,6 +251,10 @@ async def check_channel_subscription(user_id, channel_id="@alvecapitalofficiel")
             logger.info(f"Vérification d'abonnement contournée pour l'admin (ID: {user_id})")
             return True
             
+        # Utiliser le canal défini dans la configuration
+        if channel_id is None:
+            channel_id = OFFICIAL_CHANNEL
+        
         bot = Bot(token=TELEGRAM_TOKEN)
         
         # Vérifier si l'utilisateur est membre du canal
@@ -215,7 +263,10 @@ async def check_channel_subscription(user_id, channel_id="@alvecapitalofficiel")
         # Les statuts qui indiquent une adhésion active au canal
         valid_statuses = ['creator', 'administrator', 'member']
         
-        return chat_member.status in valid_statuses
+        is_member = chat_member.status in valid_statuses
+        logger.info(f"Utilisateur {user_id} est{'' if is_member else ' non'} abonné au canal {channel_id}")
+        
+        return is_member
     
     except TelegramError as e:
         logger.error(f"Erreur lors de la vérification de l'abonnement: {e}")
@@ -239,7 +290,11 @@ async def has_completed_referrals(user_id, username=None):
             return True
         
         referral_count = await count_referrals(user_id)
-        return referral_count >= MAX_REFERRALS
+        completed = referral_count >= MAX_REFERRALS
+        
+        logger.info(f"Utilisateur {user_id} a {referral_count}/{MAX_REFERRALS} parrainages - Statut: {'Complété' if completed else 'En cours'}")
+        
+        return completed
     except Exception as e:
         logger.error(f"Erreur lors de la vérification des parrainages: {e}")
         return False
@@ -276,10 +331,12 @@ async def count_referrals(user_id):
                 if len(row) >= 4 and row[0] == str(user_id) and row[3] == "Oui":
                     count += 1
             
+            logger.info(f"Utilisateur {user_id} a {count} parrainages vérifiés")
             return count
         
         except gspread.exceptions.WorksheetNotFound:
             # La feuille n'existe pas, donc aucun parrainage
+            logger.warning("Feuille 'Parrainages' non trouvée")
             return 0
     
     except Exception as e:
@@ -351,6 +408,7 @@ async def get_referred_users(user_id):
         
         except gspread.exceptions.WorksheetNotFound:
             # Une ou les deux feuilles n'existent pas
+            logger.warning("Feuilles nécessaires non trouvées")
             return []
     
     except Exception as e:

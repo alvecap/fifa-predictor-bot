@@ -1,7 +1,5 @@
 import os
 import logging
-import ssl
-import pymongo
 from pymongo import MongoClient
 from typing import Dict, List, Any, Optional
 from datetime import datetime
@@ -24,24 +22,17 @@ def get_mongodb_uri():
     return uri
 
 def get_db_connection():
-    """Établit une connexion à la base de données MongoDB avec configuration SSL explicite"""
+    """Établit une connexion à la base de données MongoDB avec configuration simplifiée"""
     try:
         uri = get_mongodb_uri()
         
-        # Créer un contexte SSL personnalisé qui ignore les erreurs de certificat
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        
-        # Configuration du client avec options SSL explicites
+        # Configuration du client avec options simplifiées
         client = MongoClient(
             uri,
-            ssl=True,
-            ssl_cert_reqs=ssl.CERT_NONE,  # Ne pas vérifier les certificats
-            socketTimeoutMS=10000,        # Timeout plus court
-            connectTimeoutMS=10000,       # Timeout de connexion plus court
-            serverSelectionTimeoutMS=10000,  # Timeout de sélection de serveur plus court
             tlsAllowInvalidCertificates=True,  # Permet les certificats invalides
+            socketTimeoutMS=10000,             # Timeout plus court
+            connectTimeoutMS=10000,            # Timeout de connexion plus court
+            serverSelectionTimeoutMS=10000     # Timeout de sélection de serveur
         )
         
         # Vérifier la connexion
@@ -235,9 +226,36 @@ def get_direct_confrontations(matches: List[Dict[str, Any]], team1: str, team2: 
     return confrontations
 
 def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None, prediction_result=None):
-    """Version qui ne sauvegarde pas l'historique des prédictions"""
-    logger.info(f"Prédiction effectuée par {username} (ID: {user_id}) pour {team1} vs {team2} - non stockée")
-    return True
+    """Enregistre les prédictions demandées par les utilisateurs"""
+    try:
+        db = get_database()
+        if not db:
+            logger.error("Impossible de se connecter à la base de données pour enregistrer la prédiction")
+            return False
+        
+        # Créer l'entrée de log
+        prediction_log = {
+            "user_id": str(user_id),
+            "username": username,
+            "date": datetime.now().isoformat(),
+            "team1": team1,
+            "team2": team2,
+            "odds1": float(odds1) if odds1 is not None else None,
+            "odds2": float(odds2) if odds2 is not None else None,
+            "prediction_result": prediction_result,
+            "status": "success" if prediction_result and "error" not in prediction_result else "failed"
+        }
+        
+        # Insérer dans la collection
+        result = db.prediction_logs.insert_one(prediction_log)
+        
+        logger.info(f"Prédiction enregistrée pour {username} (ID: {user_id}): {team1} vs {team2}")
+        return True
+    except Exception as e:
+        logger.error(f"Erreur lors de l'enregistrement de la prédiction: {e}")
+        # Fallback - au moins logger l'événement
+        logger.info(f"Prédiction non stockée pour {username} (ID: {user_id}): {team1} vs {team2}")
+        return False
 
 async def check_user_subscription(user_id):
     """

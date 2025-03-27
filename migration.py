@@ -156,6 +156,128 @@ def migrate_matches(spreadsheet, db):
         logger.error(f"Erreur lors de la migration des matchs: {e}")
         return 0
 
+def migrate_team_stats(spreadsheet, db):
+    """Migre les statistiques des équipes de Google Sheets vers MongoDB"""
+    try:
+        logger.info("Migration des statistiques d'équipes...")
+        
+        try:
+            stats_sheet = spreadsheet.worksheet("Statistiques")
+        except gspread.exceptions.WorksheetNotFound:
+            logger.warning("Feuille 'Statistiques' non trouvée, aucune donnée à migrer")
+            return 0
+        
+        # Récupérer toutes les valeurs
+        all_values = stats_sheet.get_all_values()
+        
+        # Vérifier qu'il y a au moins une ligne d'en-tête
+        if len(all_values) < 1:
+            logger.warning("Aucune donnée dans la feuille 'Statistiques'")
+            return 0
+        
+        # Récupérer les en-têtes
+        headers = all_values[0]
+        
+        # Supprimer les statistiques existantes pour éviter les doublons
+        db.team_stats.delete_many({})
+        
+        # Extraire et insérer les données
+        stats_list = []
+        for i in range(1, len(all_values)):  # Commencer à 1 pour ignorer l'en-tête
+            row = all_values[i]
+            if len(row) < len(headers):
+                continue  # Ignorer les lignes trop courtes
+            
+            # Créer un dictionnaire avec toutes les colonnes
+            stat_entry = {}
+            for j, header in enumerate(headers):
+                if j < len(row):
+                    # Essayer de convertir en nombre si possible
+                    try:
+                        if '.' in row[j]:
+                            stat_entry[header] = float(row[j])
+                        elif row[j].isdigit():
+                            stat_entry[header] = int(row[j])
+                        else:
+                            stat_entry[header] = row[j]
+                    except (ValueError, TypeError):
+                        stat_entry[header] = row[j]
+            
+            # Ajouter seulement si on a des données significatives
+            if stat_entry and any(stat_entry.values()):
+                stats_list.append(stat_entry)
+        
+        # Insertion par lots
+        if stats_list:
+            db.team_stats.insert_many(stats_list)
+            
+        logger.info(f"Migration de {len(stats_list)} entrées de statistiques réussie")
+        return len(stats_list)
+    except Exception as e:
+        logger.error(f"Erreur lors de la migration des statistiques: {e}")
+        return 0
+
+def migrate_trends(spreadsheet, db):
+    """Migre les tendances de Google Sheets vers MongoDB"""
+    try:
+        logger.info("Migration des tendances...")
+        
+        try:
+            trends_sheet = spreadsheet.worksheet("Tendances")
+        except gspread.exceptions.WorksheetNotFound:
+            logger.warning("Feuille 'Tendances' non trouvée, aucune donnée à migrer")
+            return 0
+        
+        # Récupérer toutes les valeurs
+        all_values = trends_sheet.get_all_values()
+        
+        # Vérifier qu'il y a au moins une ligne d'en-tête
+        if len(all_values) < 1:
+            logger.warning("Aucune donnée dans la feuille 'Tendances'")
+            return 0
+        
+        # Récupérer les en-têtes
+        headers = all_values[0]
+        
+        # Supprimer les tendances existantes pour éviter les doublons
+        db.trends.delete_many({})
+        
+        # Extraire et insérer les données
+        trends_list = []
+        for i in range(1, len(all_values)):  # Commencer à 1 pour ignorer l'en-tête
+            row = all_values[i]
+            if len(row) < len(headers):
+                continue  # Ignorer les lignes trop courtes
+            
+            # Créer un dictionnaire avec toutes les colonnes
+            trend_entry = {}
+            for j, header in enumerate(headers):
+                if j < len(row):
+                    # Essayer de convertir en nombre si possible
+                    try:
+                        if '.' in row[j]:
+                            trend_entry[header] = float(row[j])
+                        elif row[j].isdigit():
+                            trend_entry[header] = int(row[j])
+                        else:
+                            trend_entry[header] = row[j]
+                    except (ValueError, TypeError):
+                        trend_entry[header] = row[j]
+            
+            # Ajouter seulement si on a des données significatives
+            if trend_entry and any(trend_entry.values()):
+                trends_list.append(trend_entry)
+        
+        # Insertion par lots
+        if trends_list:
+            db.trends.insert_many(trends_list)
+            
+        logger.info(f"Migration de {len(trends_list)} entrées de tendances réussie")
+        return len(trends_list)
+    except Exception as e:
+        logger.error(f"Erreur lors de la migration des tendances: {e}")
+        return 0
+
 def migrate_users(spreadsheet, db):
     """Migre les données des utilisateurs de Google Sheets vers MongoDB"""
     try:
@@ -177,21 +299,56 @@ def migrate_users(spreadsheet, db):
         
         # S'assurer que les en-têtes correspondent à ce que nous attendons
         headers = all_values[0]
-        expected_headers = ['ID Telegram', 'Username', 'Date d\'inscription', 'Dernière activité', 'Parrainé par']
         
-        # Vérifier que les colonnes attendues sont présentes
-        columns_found = all([header in headers for header in expected_headers])
-        if not columns_found:
-            logger.warning(f"Les en-têtes ne correspondent pas. Attendu: {expected_headers}, Trouvé: {headers}")
+        # Adapter selon les en-têtes détectés
+        expected_headers_options = [
+            ['ID Telegram', 'Username', 'Date d\'inscription', 'Dernière activité', 'Parrainé par'],
+            ['ID', 'Username', 'Date inscription', 'Parrain ID', 'Parrainages', 'Dernier accès']
+        ]
         
-        # Mapper les indices de colonnes
-        column_indices = {
-            'user_id': headers.index('ID Telegram') if 'ID Telegram' in headers else 0,
-            'username': headers.index('Username') if 'Username' in headers else 1,
-            'registration_date': headers.index('Date d\'inscription') if 'Date d\'inscription' in headers else 2,
-            'last_activity': headers.index('Dernière activité') if 'Dernière activité' in headers else 3,
-            'referred_by': headers.index('Parrainé par') if 'Parrainé par' in headers else 4
-        }
+        # Mapper les indices de colonnes de manière dynamique
+        column_indices = {}
+        
+        # Vérifier quel ensemble d'en-têtes correspond le mieux
+        best_match_count = 0
+        best_match_index = 0
+        
+        for i, expected_set in enumerate(expected_headers_options):
+            match_count = sum(1 for header in expected_set if header in headers)
+            if match_count > best_match_count:
+                best_match_count = match_count
+                best_match_index = i
+        
+        # Utiliser le meilleur ensemble d'en-têtes
+        expected_headers = expected_headers_options[best_match_index]
+        
+        # Informer de la correspondance
+        logger.info(f"Utilisation de l'ensemble d'en-têtes {best_match_index+1}: {expected_headers}")
+        
+        # Correspondance détectée avec le premier ensemble (format original)
+        if best_match_index == 0:
+            column_indices = {
+                'user_id': headers.index('ID Telegram') if 'ID Telegram' in headers else None,
+                'username': headers.index('Username') if 'Username' in headers else None,
+                'registration_date': headers.index('Date d\'inscription') if 'Date d\'inscription' in headers else None,
+                'last_activity': headers.index('Dernière activité') if 'Dernière activité' in headers else None,
+                'referred_by': headers.index('Parrainé par') if 'Parrainé par' in headers else None
+            }
+        # Correspondance avec le deuxième ensemble (format actuel)
+        elif best_match_index == 1:
+            column_indices = {
+                'user_id': headers.index('ID') if 'ID' in headers else None,
+                'username': headers.index('Username') if 'Username' in headers else None,
+                'registration_date': headers.index('Date inscription') if 'Date inscription' in headers else None,
+                'referred_by': headers.index('Parrain ID') if 'Parrain ID' in headers else None,
+                'referrals_count': headers.index('Parrainages') if 'Parrainages' in headers else None,
+                'last_activity': headers.index('Dernier accès') if 'Dernier accès' in headers else None
+            }
+        
+        # Vérifier les colonnes manquantes
+        missing_columns = [k for k, v in column_indices.items() if v is None]
+        if missing_columns:
+            logger.warning(f"Colonnes utilisateur manquantes: {missing_columns}")
         
         # Supprimer les utilisateurs existants pour éviter les doublons
         db.users.delete_many({})
@@ -200,18 +357,18 @@ def migrate_users(spreadsheet, db):
         users = []
         for i in range(1, len(all_values)):  # Commencer à 1 pour ignorer l'en-tête
             row = all_values[i]
-            if len(row) <= max(column_indices.values()):
+            if len(row) < max([v for v in column_indices.values() if v is not None]):
                 continue  # Ignorer les lignes trop courtes
             
-            user = {
-                'user_id': row[column_indices['user_id']],
-                'username': row[column_indices['username']],
-                'registration_date': row[column_indices['registration_date']],
-                'last_activity': row[column_indices['last_activity']],
-                'referred_by': row[column_indices['referred_by']] if row[column_indices['referred_by']] else None
-            }
+            user = {}
             
-            if user['user_id']:  # S'assurer que l'ID utilisateur n'est pas vide
+            # Ajouter les champs disponibles
+            for field, index in column_indices.items():
+                if index is not None and index < len(row):
+                    user[field] = row[index]
+            
+            # S'assurer que l'ID utilisateur n'est pas vide
+            if user.get('user_id'):
                 users.append(user)
         
         # Insertion par lots
@@ -232,8 +389,15 @@ def migrate_referrals(spreadsheet, db):
         try:
             referrals_sheet = spreadsheet.worksheet("Parrainages")
         except gspread.exceptions.WorksheetNotFound:
-            logger.warning("Feuille 'Parrainages' non trouvée, aucune donnée à migrer")
-            return 0
+            # Essayer un nom alternatif
+            try:
+                referrals_sheet = spreadsheet.worksheet("Parrainage")
+            except gspread.exceptions.WorksheetNotFound:
+                logger.warning("Feuille 'Parrainages' ou 'Parrainage' non trouvée, aucune donnée à migrer")
+                # Création d'une structure vide pour les parrainages
+                db.referrals.delete_many({})
+                logger.info("Structure de parrainage créée sans données")
+                return 0
         
         # Récupérer toutes les valeurs
         all_values = referrals_sheet.get_all_values()
@@ -243,23 +407,55 @@ def migrate_referrals(spreadsheet, db):
             logger.warning("Aucune donnée dans la feuille 'Parrainages'")
             return 0
         
-        # S'assurer que les en-têtes correspondent à ce que nous attendons
+        # Récupérer les en-têtes
         headers = all_values[0]
-        expected_headers = ['Parrain ID', 'Filleul ID', 'Date', 'Vérifié', 'Date de vérification']
         
-        # Vérifier que les colonnes attendues sont présentes
-        columns_found = all([header in headers for header in expected_headers])
-        if not columns_found:
-            logger.warning(f"Les en-têtes ne correspondent pas. Attendu: {expected_headers}, Trouvé: {headers}")
+        # Options d'en-têtes possibles
+        expected_headers_options = [
+            ['Parrain ID', 'Filleul ID', 'Date', 'Vérifié', 'Date de vérification'],
+            ['Referrer ID', 'Referred ID', 'Date', 'Verified', 'Verification Date']
+        ]
+        
+        # Trouver la meilleure correspondance
+        best_match_count = 0
+        best_match_index = 0
+        
+        for i, expected_set in enumerate(expected_headers_options):
+            match_count = sum(1 for header in expected_set if header in headers)
+            if match_count > best_match_count:
+                best_match_count = match_count
+                best_match_index = i
+        
+        # Utiliser le meilleur ensemble d'en-têtes
+        expected_headers = expected_headers_options[best_match_index]
+        logger.info(f"Utilisation de l'ensemble d'en-têtes parrainages {best_match_index+1}: {expected_headers}")
         
         # Mapper les indices de colonnes
-        column_indices = {
-            'referrer_id': headers.index('Parrain ID') if 'Parrain ID' in headers else 0,
-            'referred_id': headers.index('Filleul ID') if 'Filleul ID' in headers else 1,
-            'date': headers.index('Date') if 'Date' in headers else 2,
-            'verified': headers.index('Vérifié') if 'Vérifié' in headers else 3,
-            'verification_date': headers.index('Date de vérification') if 'Date de vérification' in headers else 4
-        }
+        column_indices = {}
+        
+        # Format français
+        if best_match_index == 0:
+            column_indices = {
+                'referrer_id': headers.index('Parrain ID') if 'Parrain ID' in headers else None,
+                'referred_id': headers.index('Filleul ID') if 'Filleul ID' in headers else None,
+                'date': headers.index('Date') if 'Date' in headers else None,
+                'verified': headers.index('Vérifié') if 'Vérifié' in headers else None,
+                'verification_date': headers.index('Date de vérification') if 'Date de vérification' in headers else None
+            }
+        # Format anglais
+        else:
+            column_indices = {
+                'referrer_id': headers.index('Referrer ID') if 'Referrer ID' in headers else None,
+                'referred_id': headers.index('Referred ID') if 'Referred ID' in headers else None,
+                'date': headers.index('Date') if 'Date' in headers else None,
+                'verified': headers.index('Verified') if 'Verified' in headers else None,
+                'verification_date': headers.index('Verification Date') if 'Verification Date' in headers else None
+            }
+        
+        # Vérifier les colonnes manquantes
+        missing_columns = [k for k, v in column_indices.items() if v is None]
+        if missing_columns:
+            logger.warning(f"Colonnes parrainage manquantes: {missing_columns}")
         
         # Supprimer les parrainages existants pour éviter les doublons
         db.referrals.delete_many({})
@@ -268,18 +464,24 @@ def migrate_referrals(spreadsheet, db):
         referrals = []
         for i in range(1, len(all_values)):  # Commencer à 1 pour ignorer l'en-tête
             row = all_values[i]
-            if len(row) <= max(column_indices.values()):
+            max_index = max([v for v in column_indices.values() if v is not None], default=0)
+            if len(row) <= max_index:
                 continue  # Ignorer les lignes trop courtes
             
-            referral = {
-                'referrer_id': row[column_indices['referrer_id']],
-                'referred_id': row[column_indices['referred_id']],
-                'date': row[column_indices['date']],
-                'verified': row[column_indices['verified']] == 'Oui',
-                'verification_date': row[column_indices['verification_date']] if len(row) > column_indices['verification_date'] and row[column_indices['verification_date']] else None
-            }
+            referral = {}
             
-            if referral['referrer_id'] and referral['referred_id']:  # S'assurer que les IDs ne sont pas vides
+            # Ajouter les champs disponibles
+            for field, index in column_indices.items():
+                if index is not None and index < len(row):
+                    if field == 'verified':
+                        # Convertir les différentes façons d'exprimer "vérifié"
+                        value = row[index].lower()
+                        referral[field] = value in ['oui', 'yes', 'true', '1', 'vrai']
+                    else:
+                        referral[field] = row[index]
+            
+            # S'assurer que les IDs ne sont pas vides
+            if referral.get('referrer_id') and referral.get('referred_id'):
                 referrals.append(referral)
         
         # Insertion par lots
@@ -378,6 +580,30 @@ def create_indexes(db):
         db.matches.create_index("team_home")
         db.matches.create_index("team_away")
         
+        # Index pour les statistiques
+        if "team_stats" in db.list_collection_names():
+            # Supposons qu'il y a un champ 'team' qui identifie l'équipe
+            for field in ["team", "équipe", "name", "nom"]:
+                try:
+                    # Vérifier si le champ existe
+                    if db.team_stats.count_documents({field: {"$exists": True}}) > 0:
+                        db.team_stats.create_index(field)
+                        break
+                except:
+                    pass
+        
+        # Index pour les tendances
+        if "trends" in db.list_collection_names():
+            # Supposons qu'il y a un champ 'trend_type' ou 'category'
+            for field in ["trend_type", "category", "type", "catégorie"]:
+                try:
+                    # Vérifier si le champ existe
+                    if db.trends.count_documents({field: {"$exists": True}}) > 0:
+                        db.trends.create_index(field)
+                        break
+                except:
+                    pass
+        
         # Index pour les utilisateurs
         db.users.create_index("user_id", unique=True)
         db.users.create_index("username")
@@ -415,26 +641,30 @@ def main():
             return False
         
         # Migrer les données
-        total_matches = migrate_matches(spreadsheet, db)
-        total_users = migrate_users(spreadsheet, db)
-        total_referrals = migrate_referrals(spreadsheet, db)
-        total_logs = migrate_prediction_logs(spreadsheet, db)
-        
-        # Créer les index
-        create_indexes(db)
-        
-        # Résumé de la migration
-        logger.info("=== Résumé de la migration ===")
-        logger.info(f"Matchs migrés: {total_matches}")
-        logger.info(f"Utilisateurs migrés: {total_users}")
-        logger.info(f"Parrainages migrés: {total_referrals}")
-        logger.info(f"Logs de prédictions migrés: {total_logs}")
-        logger.info("Migration terminée avec succès!")
-        
-        return True
-    except Exception as e:
-        logger.error(f"Erreur lors de la migration: {e}")
-        return False
+total_matches = migrate_matches(spreadsheet, db)
+total_stats = migrate_team_stats(spreadsheet, db)
+total_trends = migrate_trends(spreadsheet, db)
+total_users = migrate_users(spreadsheet, db)
+total_referrals = migrate_referrals(spreadsheet, db)
+total_logs = migrate_prediction_logs(spreadsheet, db)
+
+# Créer les index
+create_indexes(db)
+
+# Résumé de la migration
+logger.info("=== Résumé de la migration ===")
+logger.info(f"Matchs migrés: {total_matches}")
+logger.info(f"Statistiques d'équipes migrées: {total_stats}")
+logger.info(f"Tendances migrées: {total_trends}")
+logger.info(f"Utilisateurs migrés: {total_users}")
+logger.info(f"Parrainages migrés: {total_referrals}")
+logger.info(f"Logs de prédictions migrés: {total_logs}")
+logger.info("Migration terminée avec succès!")
+
+return True
+except Exception as e:
+    logger.error(f"Erreur lors de la migration: {e}")
+    return False
 
 if __name__ == "__main__":
     # Exécuter la migration

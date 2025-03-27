@@ -16,18 +16,17 @@ logger = logging.getLogger(__name__)
 def get_mongodb_uri():
     """Récupère l'URI de connexion MongoDB depuis les variables d'environnement"""
     uri = os.environ.get('MONGODB_URI')
-    if not uri:
+    if uri is None:
         logger.warning("Variable d'environnement MONGODB_URI non trouvée. Utilisation de l'URI local par défaut.")
         return "mongodb://localhost:27017/fifa_predictor"
     return uri
 
 def get_db_connection():
-    """Établit une connexion à MongoDB Atlas avec des paramètres optimisés"""
+    """Établit une connexion à MongoDB Atlas"""
     try:
         uri = get_mongodb_uri()
         
-        # Ne pas ajouter de paramètres SSL supplémentaires
-        # L'URI MongoDB+srv:// gère déjà la configuration SSL
+        # Configuration minimaliste pour laisser l'URI gérer les paramètres
         client = MongoClient(uri)
         
         # Vérifier la connexion
@@ -41,19 +40,20 @@ def get_db_connection():
 def get_database():
     """Récupère la base de données MongoDB"""
     client = get_db_connection()
-    if client:
-        # Le nom de la base de données est généralement inclus dans l'URI
-        # Sinon, nous utilisons un nom par défaut
-        db_name = os.environ.get('MONGODB_DB_NAME', 'fifa_predictor_db')
-        return client[db_name]
-    return None
+    if client is None:
+        return None
+    
+    # Le nom de la base de données est généralement inclus dans l'URI
+    # Sinon, nous utilisons un nom par défaut
+    db_name = os.environ.get('MONGODB_DB_NAME', 'fifa_predictor_db')
+    return client[db_name]
 
 # Fonctions pour les matchs
 def get_all_matches_data() -> List[Dict[str, Any]]:
     """Récupère tous les matchs depuis MongoDB"""
     try:
         db = get_database()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à la base de données")
             return []
         
@@ -75,7 +75,7 @@ def get_all_teams() -> List[str]:
     """Récupère la liste de toutes les équipes depuis les matchs"""
     try:
         db = get_database()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à la base de données")
             return []
         
@@ -94,7 +94,6 @@ def get_all_teams() -> List[str]:
 
 def get_team_statistics(matches: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """Calcule les statistiques pour chaque équipe"""
-    # Cette fonction reste inchangée car elle traite les données en mémoire
     team_stats = {}
     
     for match in matches:
@@ -221,7 +220,7 @@ def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None,
     """Enregistre les prédictions demandées par les utilisateurs"""
     try:
         db = get_database()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à la base de données pour enregistrer la prédiction")
             logger.info(f"Prédiction non stockée pour {username} (ID: {user_id}): {team1} vs {team2}")
             return False
@@ -240,7 +239,7 @@ def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None,
         }
         
         # Insérer dans la collection
-        result = db.prediction_logs.insert_one(prediction_log)
+        db.prediction_logs.insert_one(prediction_log)
         
         logger.info(f"Prédiction enregistrée pour {username} (ID: {user_id}): {team1} vs {team2}")
         return True
@@ -317,7 +316,7 @@ async def register_user(user_id, username, referrer_id=None):
             return True
             
         db = get_database()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à la base de données pour enregistrer l'utilisateur")
             return False
         
@@ -325,7 +324,7 @@ async def register_user(user_id, username, referrer_id=None):
         existing_user = db.users.find_one({"user_id": str(user_id)})
         current_time = datetime.now().isoformat()
         
-        if existing_user:
+        if existing_user is not None:
             # Si l'utilisateur existe, mise à jour
             update_data = {
                 "$set": {
@@ -335,7 +334,7 @@ async def register_user(user_id, username, referrer_id=None):
             }
             
             # Si un parrain est spécifié et que l'utilisateur n'a pas déjà un parrain
-            if referrer_id and referrer_id != user_id and not existing_user.get("referred_by"):
+            if referrer_id and referrer_id != user_id and (not existing_user.get("referred_by")):
                 update_data["$set"]["referred_by"] = str(referrer_id)
                 
                 # Créer la relation de parrainage
@@ -383,7 +382,7 @@ async def create_referral_relationship(user_id, referrer_id):
             return
             
         db = get_database()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à la base de données pour créer un parrainage")
             return
         
@@ -393,14 +392,14 @@ async def create_referral_relationship(user_id, referrer_id):
             "referred_id": str(user_id)
         })
         
-        if not existing_referral:
+        if existing_referral is None:
             # Vérifier s'il n'y a pas de boucle de parrainage (A parraine B qui parraine A)
             reverse_relation = db.referrals.find_one({
                 "referrer_id": str(user_id),
                 "referred_id": str(referrer_id)
             })
             
-            if reverse_relation:
+            if reverse_relation is not None:
                 logger.warning(f"Boucle de parrainage détectée: {user_id} et {referrer_id} se parrainent mutuellement")
                 return
             
@@ -409,7 +408,7 @@ async def create_referral_relationship(user_id, referrer_id):
                 "referred_id": str(user_id)
             })
             
-            if other_referrer and other_referrer["referrer_id"] != str(referrer_id):
+            if other_referrer is not None and other_referrer["referrer_id"] != str(referrer_id):
                 logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {other_referrer['referrer_id']}")
                 return
             
@@ -455,7 +454,7 @@ async def verify_and_update_referral(user_id, referrer_id):
         
         if is_subscribed:
             db = get_database()
-            if not db:
+            if db is None:
                 logger.error("Impossible de se connecter à la base de données pour vérifier un parrainage")
                 return
             
@@ -551,7 +550,7 @@ async def count_referrals(user_id):
             return max_referrals
         
         db = get_database()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à la base de données pour compter les parrainages")
             return 0
         
@@ -586,7 +585,7 @@ async def get_referred_users(user_id):
             return []
         
         db = get_database()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à la base de données pour récupérer les parrainages")
             return []
         
@@ -601,7 +600,7 @@ async def get_referred_users(user_id):
                 user_info = db.users.find_one({"user_id": referred_id})
                 
                 username = "Inconnu"
-                if user_info and "username" in user_info:
+                if user_info is not None and "username" in user_info:
                     username = user_info["username"]
                 
                 referred_users.append({
@@ -632,7 +631,6 @@ async def generate_referral_link(user_id, bot_username):
 async def get_max_referrals():
     """
     Récupère le nombre maximum de parrainages requis.
-    Cette fonction permet de centraliser cette valeur qui pourrait être stockée en DB.
     
     Returns:
         int: Nombre maximum de parrainages requis

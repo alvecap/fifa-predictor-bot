@@ -171,9 +171,24 @@ async def verify_referral(message, user_id, username, context=None, edit=False) 
                 parse_mode='Markdown'
             )
             
-        # Si on est en mode admin, on passe directement au menu des jeux
-        if context:
-            await show_games_menu(message, context)
+        # Créer un bouton direct pour chaque jeu (contournement pour éviter les erreurs)
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Message avec boutons directs pour les administrateurs
+        try:
+            await message.reply_text(
+                "🎮 *Menu des jeux disponibles*\n\n"
+                "Sélectionnez un jeu pour commencer:",
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            logger.error(f"Erreur lors de l'affichage des boutons de jeu: {e}")
             
         return True
     
@@ -240,9 +255,24 @@ async def verify_referral(message, user_id, username, context=None, edit=False) 
             parse_mode='Markdown'
         )
         
-        # Afficher le menu des jeux après validation complète
-        if context:
-            await show_games_menu(message, context)
+        # Créer un bouton direct pour chaque jeu
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Message avec boutons directs
+        try:
+            await message.reply_text(
+                "🎮 *Menu des jeux disponibles*\n\n"
+                "Sélectionnez un jeu pour commencer:",
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            logger.error(f"Erreur lors de l'affichage des boutons de jeu: {e}")
         
         return True
     else:
@@ -353,93 +383,3 @@ async def verify_all_requirements(user_id, username, message, context=None) -> b
         return False
     
     return True
-
-# Affichage du menu principal des jeux
-async def show_games_menu(message, context) -> None:
-    """
-    Affiche le menu principal avec tous les jeux disponibles.
-    
-    Args:
-        message: Message Telegram pour répondre
-        context: Contexte de conversation Telegram
-    """
-    # Extraire l'ID utilisateur et le nom d'utilisateur
-    user_id = None
-    username = None
-    
-    if hasattr(message, 'from_user'):
-        user_id = message.from_user.id
-        username = message.from_user.username
-    elif context and context.user_data:
-        user_id = context.user_data.get("user_id")
-        username = context.user_data.get("username")
-    
-    # Vérifier si c'est un admin
-    admin_status = False
-    if user_id:
-        admin_status = is_admin(user_id, username)
-    
-    # Texte du menu
-    menu_text = (
-        "🎮 *FIFA GAMES - Menu Principal* 🎮\n\n"
-        "Choisissez un jeu pour obtenir des prédictions :\n\n"
-        "🏆 *FIFA 4x4 Predictor*\n"
-        "_Prédictions précises basées sur des statistiques réelles et analyses de matchs_\n\n"
-        "🍎 *Apple of Fortune*\n"
-        "_Trouvez la bonne pomme grâce à notre système prédictif avancé_\n\n"
-        "🃏 *Baccarat*\n"
-        "_Anticipez le gagnant avec notre technologie d'analyse de tendances_\n\n"
-        "⚡ *Plus de jeux en préparation* ⚡"
-    )
-    
-    # Boutons pour accéder aux différents jeux
-    keyboard = [
-        [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
-        [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
-        [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    try:
-        if admin_status:
-            # Affichage direct sans animation pour les admins
-            logger.info(f"Affichage direct du menu pour l'admin {username} (ID: {user_id})")
-            if hasattr(message, 'edit_text'):
-                await message.edit_text(
-                    menu_text,
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
-            else:
-                await message.reply_text(
-                    menu_text,
-                    reply_markup=reply_markup,
-                    parse_mode='Markdown'
-                )
-            return
-        
-        # Animation pour les non-admins
-        transition_frames = [
-            "🎲 *Chargement des jeux...*",
-            "🎮 *Préparation du menu...*",
-            "🎯 *Tout est prêt!*"
-        ]
-        
-        msg = await message.reply_text(transition_frames[0], parse_mode='Markdown')
-        
-        for frame in transition_frames[1:]:
-            await asyncio.sleep(0.3)
-            await msg.edit_text(frame, parse_mode='Markdown')
-        
-        # Message final avec le menu
-        await msg.edit_text(
-            menu_text,
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        logger.error(f"Erreur lors de l'affichage du menu des jeux: {e}")
-        await message.reply_text(
-            "Désolé, une erreur s'est produite lors du chargement du menu des jeux. Veuillez réessayer.",
-            parse_mode='Markdown'
-        )

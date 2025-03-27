@@ -641,30 +641,31 @@ def main():
             return False
         
         # Migrer les données
-total_matches = migrate_matches(spreadsheet, db)
-total_stats = migrate_team_stats(spreadsheet, db)
-total_trends = migrate_trends(spreadsheet, db)
-total_users = migrate_users(spreadsheet, db)
-total_referrals = migrate_referrals(spreadsheet, db)
-total_logs = migrate_prediction_logs(spreadsheet, db)
+        total_matches = migrate_matches(spreadsheet, db)
+        total_stats = migrate_team_stats(spreadsheet, db)
+        total_trends = migrate_trends(spreadsheet, db)
+        total_users = migrate_users(spreadsheet, db)
+        total_referrals = migrate_referrals(spreadsheet, db)
+        total_logs = migrate_prediction_logs(spreadsheet, db)
 
-# Créer les index
-create_indexes(db)
+        # Créer les index
+        create_indexes(db)
 
-# Résumé de la migration
-logger.info("=== Résumé de la migration ===")
-logger.info(f"Matchs migrés: {total_matches}")
-logger.info(f"Statistiques d'équipes migrées: {total_stats}")
-logger.info(f"Tendances migrées: {total_trends}")
-logger.info(f"Utilisateurs migrés: {total_users}")
-logger.info(f"Parrainages migrés: {total_referrals}")
-logger.info(f"Logs de prédictions migrés: {total_logs}")
-logger.info("Migration terminée avec succès!")
+        # Résumé de la migration
+        # Résumé de la migration
+        logger.info("=== Résumé de la migration ===")
+        logger.info(f"Matchs migrés: {total_matches}")
+        logger.info(f"Statistiques d'équipes migrées: {total_stats}")
+        logger.info(f"Tendances migrées: {total_trends}")
+        logger.info(f"Utilisateurs migrés: {total_users}")
+        logger.info(f"Parrainages migrés: {total_referrals}")
+        logger.info(f"Logs de prédictions migrés: {total_logs}")
+        logger.info("Migration terminée avec succès!")
 
-return True
-except Exception as e:
-    logger.error(f"Erreur lors de la migration: {e}")
-    return False
+        return True
+    except Exception as e:
+        logger.error(f"Erreur lors de la migration: {e}")
+        return False
 
 if __name__ == "__main__":
     # Exécuter la migration

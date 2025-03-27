@@ -1,5 +1,6 @@
 import os
 import logging
+import ssl
 import pymongo
 from pymongo import MongoClient
 from typing import Dict, List, Any, Optional
@@ -23,10 +24,26 @@ def get_mongodb_uri():
     return uri
 
 def get_db_connection():
-    """Établit une connexion à la base de données MongoDB"""
+    """Établit une connexion à la base de données MongoDB avec configuration SSL explicite"""
     try:
         uri = get_mongodb_uri()
-        client = MongoClient(uri)
+        
+        # Créer un contexte SSL personnalisé qui ignore les erreurs de certificat
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # Configuration du client avec options SSL explicites
+        client = MongoClient(
+            uri,
+            ssl=True,
+            ssl_cert_reqs=ssl.CERT_NONE,  # Ne pas vérifier les certificats
+            socketTimeoutMS=10000,        # Timeout plus court
+            connectTimeoutMS=10000,       # Timeout de connexion plus court
+            serverSelectionTimeoutMS=10000,  # Timeout de sélection de serveur plus court
+            tlsAllowInvalidCertificates=True,  # Permet les certificats invalides
+        )
+        
         # Vérifier la connexion
         client.admin.command('ping')
         logger.info("Connexion à MongoDB établie avec succès")

@@ -22,25 +22,35 @@ def get_mongodb_uri():
     return uri
 
 def get_db_connection():
-    """Établit une connexion à la base de données MongoDB avec configuration simplifiée"""
+    """Établit une connexion à la base de données MongoDB optimisée pour Render et MongoDB Atlas"""
     try:
         uri = get_mongodb_uri()
         
-        # Configuration du client avec options simplifiées
+        # Pour les déploiements sur Render se connectant à MongoDB Atlas:
+        # - Utiliser une approche minimaliste
+        # - Éviter d'interférer avec les paramètres de l'URI
+        # - Augmenter les timeouts pour tenir compte de la latence potentielle
+        
         client = MongoClient(
             uri,
-            tlsAllowInvalidCertificates=True,  # Permet les certificats invalides
-            socketTimeoutMS=10000,             # Timeout plus court
-            connectTimeoutMS=10000,            # Timeout de connexion plus court
-            serverSelectionTimeoutMS=10000     # Timeout de sélection de serveur
+            serverSelectionTimeoutMS=30000,  # 30 secondes pour la sélection du serveur
+            connectTimeoutMS=20000,          # 20 secondes pour la connexion
+            socketTimeoutMS=20000            # 20 secondes pour les opérations de socket
         )
         
         # Vérifier la connexion
         client.admin.command('ping')
-        logger.info("Connexion à MongoDB établie avec succès")
+        logger.info("Connexion à MongoDB établie avec succès depuis Render")
         return client
     except Exception as e:
-        logger.error(f"Erreur de connexion à MongoDB: {e}")
+        logger.error(f"Erreur de connexion à MongoDB depuis Render: {e}")
+        
+        # Log plus détaillé pour aider au débogage
+        if 'SSL' in str(e):
+            logger.error("Erreur SSL détectée. Vérifiez que l'URI MongoDB contient les bons paramètres SSL.")
+        if 'timed out' in str(e):
+            logger.error("Timeout détecté. Vérifiez les règles de pare-feu et les configurations réseau.")
+        
         return None
 
 def get_database():
@@ -100,7 +110,6 @@ def get_all_teams() -> List[str]:
 def get_team_statistics(matches: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """Calcule les statistiques pour chaque équipe"""
     # Cette fonction reste inchangée car elle traite les données en mémoire
-    # La logique reste la même que dans l'original database.py
     team_stats = {}
     
     for match in matches:
@@ -178,7 +187,6 @@ def get_team_statistics(matches: List[Dict[str, Any]]) -> Dict[str, Dict[str, An
 
 def get_match_id_trends(matches: List[Dict[str, Any]]) -> Dict[str, Dict[str, List[str]]]:
     """Analyse les tendances par numéro de match"""
-    # Cette fonction reste inchangée car elle traite les données en mémoire
     from collections import defaultdict
     
     match_id_trends = defaultdict(lambda: {'final_scores': [], 'first_half_scores': []})
@@ -198,7 +206,6 @@ def get_match_id_trends(matches: List[Dict[str, Any]]) -> Dict[str, Dict[str, Li
 
 def get_common_scores(scores_list, top_n=5):
     """Retourne les scores les plus communs avec leur fréquence"""
-    # Cette fonction reste inchangée car elle traite les données en mémoire
     from collections import Counter
     
     if not scores_list:
@@ -231,6 +238,7 @@ def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None,
         db = get_database()
         if not db:
             logger.error("Impossible de se connecter à la base de données pour enregistrer la prédiction")
+            logger.info(f"Prédiction non stockée pour {username} (ID: {user_id}): {team1} vs {team2}")
             return False
         
         # Créer l'entrée de log
@@ -272,10 +280,15 @@ async def check_user_subscription(user_id):
         from telegram.error import TelegramError
         from config import TELEGRAM_TOKEN
         
+        # Vérifier si c'est un admin
+        from admin_access import is_admin
+        if is_admin(user_id):
+            logger.info(f"Vérification d'abonnement contournée pour l'admin (ID: {user_id})")
+            return True
+        
         bot = Bot(token=TELEGRAM_TOKEN)
         
         # Identifiant du canal @alvecapitalofficiel
-        # Assurez-vous que cette valeur est cohérente dans tout le code
         channel_id = "@alvecapitalofficiel"
         
         # Vérifier si l'utilisateur est membre du canal
@@ -284,11 +297,16 @@ async def check_user_subscription(user_id):
         # Les statuts qui indiquent une adhésion active au canal
         valid_statuses = ['creator', 'administrator', 'member']
         
-        return chat_member.status in valid_statuses
+        is_member = chat_member.status in valid_statuses
+        logger.info(f"Utilisateur {user_id} est{'' if is_member else ' non'} abonné au canal {channel_id}")
+        
+        return is_member
     
     except TelegramError as e:
-        # En cas d'erreur, logger l'erreur et considérer que l'utilisateur n'est pas abonné
-        logging.error(f"Erreur lors de la vérification de l'abonnement: {e}")
+        logger.error(f"Erreur lors de la vérification de l'abonnement: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Erreur générale lors de la vérification de l'abonnement: {e}")
         return False
 
 # Fonctions pour les utilisateurs
@@ -315,7 +333,7 @@ async def register_user(user_id, username, referrer_id=None):
             
         db = get_database()
         if not db:
-            logger.error("Impossible de se connecter à la base de données")
+            logger.error("Impossible de se connecter à la base de données pour enregistrer l'utilisateur")
             return False
         
         # Vérifier si l'utilisateur existe déjà
@@ -339,6 +357,7 @@ async def register_user(user_id, username, referrer_id=None):
                 await create_referral_relationship(user_id, referrer_id)
             
             db.users.update_one({"user_id": str(user_id)}, update_data)
+            logger.info(f"Utilisateur mis à jour: {username} (ID: {user_id})")
         else:
             # Si l'utilisateur n'existe pas, création
             new_user = {
@@ -350,6 +369,7 @@ async def register_user(user_id, username, referrer_id=None):
             }
             
             db.users.insert_one(new_user)
+            logger.info(f"Nouvel utilisateur enregistré: {username} (ID: {user_id})")
             
             # Si un parrain est spécifié, créer la relation
             if referrer_id and referrer_id != user_id:
@@ -379,7 +399,7 @@ async def create_referral_relationship(user_id, referrer_id):
             
         db = get_database()
         if not db:
-            logger.error("Impossible de se connecter à la base de données")
+            logger.error("Impossible de se connecter à la base de données pour créer un parrainage")
             return
         
         # Vérifier si la relation existe déjà
@@ -389,6 +409,25 @@ async def create_referral_relationship(user_id, referrer_id):
         })
         
         if not existing_referral:
+            # Vérifier s'il n'y a pas de boucle de parrainage (A parraine B qui parraine A)
+            reverse_relation = db.referrals.find_one({
+                "referrer_id": str(user_id),
+                "referred_id": str(referrer_id)
+            })
+            
+            if reverse_relation:
+                logger.warning(f"Boucle de parrainage détectée: {user_id} et {referrer_id} se parrainent mutuellement")
+                return
+            
+            # Vérifier si l'utilisateur est déjà parrainé par quelqu'un d'autre
+            other_referrer = db.referrals.find_one({
+                "referred_id": str(user_id)
+            })
+            
+            if other_referrer and other_referrer["referrer_id"] != str(referrer_id):
+                logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {other_referrer['referrer_id']}")
+                return
+            
             # Créer la relation de parrainage
             current_time = datetime.now().isoformat()
             new_referral = {
@@ -405,6 +444,8 @@ async def create_referral_relationship(user_id, referrer_id):
             # Lancer la vérification d'abonnement en arrière-plan
             import asyncio
             asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
+        else:
+            logger.info(f"Relation de parrainage déjà existante: {referrer_id} -> {user_id}")
     
     except Exception as e:
         logger.error(f"Erreur lors de la création de la relation de parrainage: {e}")
@@ -418,7 +459,7 @@ async def verify_and_update_referral(user_id, referrer_id):
         referrer_id (int): ID Telegram du parrain
     """
     try:
-        # Attendre un peu plus longtemps avant de vérifier (30 secondes au lieu de 5)
+        # Attendre 30 secondes avant de vérifier
         # Cela donne plus de temps à l'utilisateur pour s'abonner au canal
         import asyncio
         await asyncio.sleep(30)
@@ -430,7 +471,7 @@ async def verify_and_update_referral(user_id, referrer_id):
         if is_subscribed:
             db = get_database()
             if not db:
-                logger.error("Impossible de se connecter à la base de données")
+                logger.error("Impossible de se connecter à la base de données pour vérifier un parrainage")
                 return
             
             # Mettre à jour le statut de vérification
@@ -496,7 +537,11 @@ async def has_completed_referrals(user_id, username=None):
         
         referral_count = await count_referrals(user_id)
         max_referrals = await get_max_referrals()
-        return referral_count >= max_referrals
+        
+        completed = referral_count >= max_referrals
+        logger.info(f"Utilisateur {user_id} a {referral_count}/{max_referrals} parrainages - Statut: {'Complété' if completed else 'En cours'}")
+        
+        return completed
     except Exception as e:
         logger.error(f"Erreur lors de la vérification des parrainages: {e}")
         return False
@@ -522,7 +567,7 @@ async def count_referrals(user_id):
         
         db = get_database()
         if not db:
-            logger.error("Impossible de se connecter à la base de données")
+            logger.error("Impossible de se connecter à la base de données pour compter les parrainages")
             return 0
         
         # Compter les parrainages vérifiés
@@ -557,7 +602,7 @@ async def get_referred_users(user_id):
         
         db = get_database()
         if not db:
-            logger.error("Impossible de se connecter à la base de données")
+            logger.error("Impossible de se connecter à la base de données pour récupérer les parrainages")
             return []
         
         # Récupérer les parrainages
@@ -607,14 +652,18 @@ async def get_max_referrals():
     Returns:
         int: Nombre maximum de parrainages requis
     """
-    # Par défaut, nous utilisons la constante, mais on pourrait la stocker en DB
     try:
-        # Essayer d'importer depuis config_supabase.py
-        from config_supabase import MAX_REFERRALS
+        # Essayer d'importer depuis config
+        from config import MAX_REFERRALS
         return MAX_REFERRALS
     except ImportError:
-        # Valeur par défaut si non disponible
-        return 1
+        try:
+            # Essayer d'importer depuis config_supabase.py
+            from config_supabase import MAX_REFERRALS
+            return MAX_REFERRALS
+        except ImportError:
+            # Valeur par défaut si non disponible
+            return 1
 
 def get_referral_instructions():
     """

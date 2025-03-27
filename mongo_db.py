@@ -22,35 +22,20 @@ def get_mongodb_uri():
     return uri
 
 def get_db_connection():
-    """Établit une connexion à la base de données MongoDB optimisée pour Render et MongoDB Atlas"""
+    """Établit une connexion à MongoDB Atlas avec des paramètres optimisés"""
     try:
         uri = get_mongodb_uri()
         
-        # Pour les déploiements sur Render se connectant à MongoDB Atlas:
-        # - Utiliser une approche minimaliste
-        # - Éviter d'interférer avec les paramètres de l'URI
-        # - Augmenter les timeouts pour tenir compte de la latence potentielle
-        
-        client = MongoClient(
-            uri,
-            serverSelectionTimeoutMS=30000,  # 30 secondes pour la sélection du serveur
-            connectTimeoutMS=20000,          # 20 secondes pour la connexion
-            socketTimeoutMS=20000            # 20 secondes pour les opérations de socket
-        )
+        # Ne pas ajouter de paramètres SSL supplémentaires
+        # L'URI MongoDB+srv:// gère déjà la configuration SSL
+        client = MongoClient(uri)
         
         # Vérifier la connexion
         client.admin.command('ping')
-        logger.info("Connexion à MongoDB établie avec succès depuis Render")
+        logger.info("Connexion à MongoDB établie avec succès")
         return client
     except Exception as e:
-        logger.error(f"Erreur de connexion à MongoDB depuis Render: {e}")
-        
-        # Log plus détaillé pour aider au débogage
-        if 'SSL' in str(e):
-            logger.error("Erreur SSL détectée. Vérifiez que l'URI MongoDB contient les bons paramètres SSL.")
-        if 'timed out' in str(e):
-            logger.error("Timeout détecté. Vérifiez les règles de pare-feu et les configurations réseau.")
-        
+        logger.error(f"Erreur de connexion à MongoDB: {e}")
         return None
 
 def get_database():

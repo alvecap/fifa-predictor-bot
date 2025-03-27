@@ -3,6 +3,8 @@ import logging
 from typing import Dict, List, Tuple, Optional, Any
 import math
 import re
+import time
+from datetime import datetime, timedelta
 from config import MAX_PREDICTIONS_HALF_TIME, MAX_PREDICTIONS_FULL_TIME
 from database_adapter import (
     get_all_matches_data, get_team_statistics, 
@@ -16,9 +18,75 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+class PredictionCache:
+    def __init__(self, cache_duration=1800):  # Par défaut: cache de 30 minutes
+        self.cache = {}
+        self.cache_duration = cache_duration
+        self.last_cleanup = time.time()
+    
+    def get_prediction(self, team1, team2, odds1=None, odds2=None):
+        """Récupère une prédiction du cache si elle existe et n'est pas expirée"""
+        # Nettoyage périodique si nécessaire
+        self._periodic_cleanup()
+        
+        cache_key = self._generate_key(team1, team2, odds1, odds2)
+        
+        if cache_key in self.cache:
+            timestamp, prediction = self.cache[cache_key]
+            if time.time() - timestamp < self.cache_duration:
+                logger.info(f"Cache hit: {team1} vs {team2}")
+                return prediction
+            else:
+                # Nettoyer cette entrée expirée particulière
+                del self.cache[cache_key]
+                logger.info(f"Cache expired: {team1} vs {team2}")
+        
+        logger.info(f"Cache miss: {team1} vs {team2}")
+        return None
+    
+    def store_prediction(self, team1, team2, prediction, odds1=None, odds2=None):
+        """Stocke une prédiction dans le cache"""
+        cache_key = self._generate_key(team1, team2, odds1, odds2)
+        self.cache[cache_key] = (time.time(), prediction)
+        logger.info(f"Cached prediction for: {team1} vs {team2}")
+    
+    def _generate_key(self, team1, team2, odds1, odds2):
+        """Génère une clé unique pour le cache"""
+        # Normaliser les cotes pour éviter des problèmes de précision flottante
+        odds1_str = f"{odds1:.2f}" if odds1 is not None else "None"
+        odds2_str = f"{odds2:.2f}" if odds2 is not None else "None"
+        return f"{team1}_{team2}_{odds1_str}_{odds2_str}"
+    
+    def clear_all(self):
+        """Vide complètement le cache"""
+        self.cache = {}
+        logger.info("Cache cleared completely")
+    
+    def _periodic_cleanup(self):
+        """Nettoie le cache toutes les 5 minutes"""
+        now = time.time()
+        if now - self.last_cleanup > 300:  # 300 secondes = 5 minutes
+            self.clear_expired()
+            self.last_cleanup = now
+    
+    def clear_expired(self):
+        """Supprime les prédictions expirées du cache"""
+        now = time.time()
+        expired_keys = [k for k, (timestamp, _) in self.cache.items() 
+                       if now - timestamp > self.cache_duration]
+        
+        for k in expired_keys:
+            del self.cache[k]
+        
+        if expired_keys:
+            logger.info(f"Cleared {len(expired_keys)} expired predictions from cache")
+
 class MatchPredictor:
     def __init__(self):
         """Initialise le prédicteur de match"""
+        # Initialiser le cache avec une durée de 30 minutes
+        self.prediction_cache = PredictionCache(cache_duration=1800)
+        
         # Charger les données de matchs
         self.matches = get_all_matches_data()
         self.team_stats = None
@@ -99,6 +167,11 @@ class MatchPredictor:
     def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
         """Prédit le résultat d'un match entre team1 et team2"""
         logger.info(f"Tentative d'analyse du match: {team1} vs {team2}")
+        
+        # Vérifier si la prédiction est dans le cache
+        cached_prediction = self.prediction_cache.get_prediction(team1, team2, odds1, odds2)
+        if cached_prediction:
+            return cached_prediction
         
         # Vérifier si les statistiques sont disponibles
         if not self.team_stats:
@@ -195,6 +268,10 @@ class MatchPredictor:
         # 2. Analyse des performances à domicile/extérieur
         # Team1 à domicile
         home_matches = self.team_stats[team1]['home_matches']
+        home_win_pct = 0
+        home_draw_pct = 0
+        home_loss_pct = 0
+        
         if home_matches > 0:
             home_win_pct = round(self.team_stats[team1]['home_wins'] / home_matches * 100, 1)
             home_draw_pct = round(self.team_stats[team1]['home_draws'] / home_matches * 100, 1)
@@ -217,6 +294,10 @@ class MatchPredictor:
         
         # Team2 à l'extérieur
         away_matches = self.team_stats[team2]['away_matches']
+        away_win_pct = 0
+        away_draw_pct = 0
+        away_loss_pct = 0
+        
         if away_matches > 0:
             away_win_pct = round(self.team_stats[team2]['away_wins'] / away_matches * 100, 1)
             away_draw_pct = round(self.team_stats[team2]['away_draws'] / away_matches * 100, 1)
@@ -269,6 +350,63 @@ class MatchPredictor:
                     for score, count, pct in common_half[:2]:
                         all_half_scores.append((score, pct * 0.8))
         
+        # 4. Calculer la forme récente des équipes
+        team1_form = self._calculate_team_form(team1, 5)
+        team2_form = self._calculate_team_form(team2, 5)
+        
+        # 5. Ajuster les prédictions en fonction des cotes si disponibles
+        if odds1 is not None and odds2 is not None:
+            # Calculer les probabilités implicites des cotes
+            prob1 = 1 / odds1
+            prob2 = 1 / odds2
+            # Normaliser
+            total_prob = prob1 + prob2
+            prob1 = prob1 / total_prob
+            prob2 = prob2 / total_prob
+            
+            # Ajuster les poids pour les équipes en fonction des cotes
+            for i, (score, weight) in enumerate(all_final_scores):
+                try:
+                    parts = score.split(':')
+                    goals1 = int(parts[0])
+                    goals2 = int(parts[1])
+                    
+                    # Si team1 gagne dans ce score et les cotes favorisent team1
+                    if goals1 > goals2 and prob1 > 0.5:
+                        all_final_scores[i] = (score, weight * (1 + (prob1 - 0.5) * 2))
+                    # Si team2 gagne dans ce score et les cotes favorisent team2
+                    elif goals2 > goals1 and prob2 > 0.5:
+                        all_final_scores[i] = (score, weight * (1 + (prob2 - 0.5) * 2))
+                    # Si match nul et les cotes sont proches
+                    elif goals1 == goals2 and abs(prob1 - prob2) < 0.1:
+                        all_final_scores[i] = (score, weight * 1.3)
+                except (ValueError, IndexError):
+                    continue
+        
+        # 6. Ajustement spécifique pour FIFA 4x4 (beaucoup de buts)
+        # Favoriser légèrement les scores avec plus de buts
+        for i, (score, weight) in enumerate(all_final_scores):
+            try:
+                parts = score.split(':')
+                total_goals = int(parts[0]) + int(parts[1])
+                # Pour FIFA 4x4, favoriser davantage les scores avec 6+ buts
+                if total_goals >= 6:
+                    all_final_scores[i] = (score, weight * 1.3)
+                elif total_goals >= 4:
+                    all_final_scores[i] = (score, weight * 1.15)
+            except (ValueError, IndexError):
+                continue
+                
+        for i, (score, weight) in enumerate(all_half_scores):
+            try:
+                parts = score.split(':')
+                total_goals = int(parts[0]) + int(parts[1])
+                # Pour mi-temps FIFA 4x4, favoriser davantage les scores avec 3+ buts
+                if total_goals >= 3:
+                    all_half_scores[i] = (score, weight * 1.2)
+            except (ValueError, IndexError):
+                continue
+        
         # Combiner et fusionner les scores identiques
         final_score_weights = defaultdict(float)
         for score, weight in all_final_scores:
@@ -282,7 +420,7 @@ class MatchPredictor:
         sorted_final_scores = sorted(final_score_weights.items(), key=lambda x: x[1], reverse=True)
         sorted_half_scores = sorted(half_score_weights.items(), key=lambda x: x[1], reverse=True)
         
-        # 4. Remplir les résultats de prédiction
+        # 7. Remplir les résultats de prédiction
         
         # Prédictions des scores mi-temps
         if sorted_half_scores:
@@ -348,7 +486,7 @@ class MatchPredictor:
                     logger.warning(f"Erreur lors de l'analyse du score temps réglementaire: {e}")
                     continue
         
-        # Calcul du niveau de confiance global
+        # 8. Calcul du niveau de confiance global
         confidence_factors = []
         
         # Facteur 1: Nombre de confrontations directes
@@ -397,6 +535,17 @@ class MatchPredictor:
                     logger.warning(f"Erreur lors de l'analyse de la cohérence: {e}")
                     confidence_factors.append(65)
         
+        # Facteur 5: Forme récente des équipes
+        if team1_form is not None and team2_form is not None:
+            # Si les deux équipes ont une bonne forme récente
+            avg_form = (team1_form + team2_form) / 2
+            if avg_form > 0.7:
+                confidence_factors.append(85)
+            elif avg_form > 0.5:
+                confidence_factors.append(75)
+            else:
+                confidence_factors.append(65)
+        
         # Calcul de la confiance globale (moyenne pondérée)
         if confidence_factors:
             prediction_results["confidence_level"] = round(sum(confidence_factors) / len(confidence_factors))
@@ -405,8 +554,72 @@ class MatchPredictor:
         prediction_results["avg_goals_half_time"] = round(prediction_results["avg_goals_half_time"], 1)
         prediction_results["avg_goals_full_time"] = round(prediction_results["avg_goals_full_time"], 1)
         
+        # Stocker la prédiction dans le cache
+        self.prediction_cache.store_prediction(team1, team2, prediction_results, odds1, odds2)
+        
         logger.info(f"Prédiction générée avec succès pour {team1} vs {team2}")
         return prediction_results
+    
+    def _calculate_team_form(self, team, last_n=5):
+        """
+        Calcule la forme récente d'une équipe (proportion de victoires sur les derniers matchs)
+        Retourne un score entre 0 et 1
+        """
+        # Collecter les derniers matchs de l'équipe (domicile et extérieur)
+        team_matches = []
+        for match in self.matches:
+            team_home = match.get('team_home', '')
+            team_away = match.get('team_away', '')
+            score_final = match.get('score_final', '')
+            
+            if not score_final:
+                continue
+                
+            if team_home == team or team_away == team:
+                try:
+                    parts = score_final.split(':')
+                    home_goals = int(parts[0])
+                    away_goals = int(parts[1])
+                    
+                    # Déterminer si l'équipe a gagné, perdu ou fait match nul
+                    if team_home == team:
+                        if home_goals > away_goals:
+                            result = 'win'
+                        elif home_goals < away_goals:
+                            result = 'loss'
+                        else:
+                            result = 'draw'
+                    else:  # team_away == team
+                        if away_goals > home_goals:
+                            result = 'win'
+                        elif away_goals < home_goals:
+                            result = 'loss'
+                        else:
+                            result = 'draw'
+                    
+                    team_matches.append({
+                        'score': score_final,
+                        'result': result
+                    })
+                except (ValueError, IndexError):
+                    continue
+        
+        # Prendre les n derniers matchs
+        recent_matches = team_matches[-last_n:] if len(team_matches) >= last_n else team_matches
+        
+        if not recent_matches:
+            return None
+        
+        # Calculer le score de forme (1 point pour victoire, 0.5 pour nul, 0 pour défaite)
+        form_score = 0
+        for match in recent_matches:
+            if match['result'] == 'win':
+                form_score += 1
+            elif match['result'] == 'draw':
+                form_score += 0.5
+        
+        # Normaliser entre 0 et 1
+        return form_score / len(recent_matches)
 
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
     """Formate le résultat de prédiction en message lisible et attrayant"""
@@ -475,6 +688,9 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     
     # Format paris sportif correct pour les buts en mi-temps
     avg_ht_goals = prediction['avg_goals_half_time']
+    # Pour FIFA 4x4, augmenter légèrement le nombre moyen de buts attendus
+    avg_ht_goals = avg_ht_goals * 1.1  # +10% pour tenir compte du contexte FIFA 4x4
+    
     # Calculer la ligne de pari exacte (0.5 près) au lieu de l'arrondir
     half_time_expected = round(avg_ht_goals)
     # Déterminer la ligne de pari pour over/under
@@ -485,6 +701,9 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     
     # Format paris sportif correct pour les buts en temps réglementaire
     avg_ft_goals = prediction['avg_goals_full_time']
+    # Pour FIFA 4x4, augmenter légèrement le nombre moyen de buts attendus
+    avg_ft_goals = avg_ft_goals * 1.1  # +10% pour tenir compte du contexte FIFA 4x4
+    
     # Calculer la ligne de pari exacte (0.5 près)
     full_time_expected = round(avg_ft_goals)
     # Déterminer la ligne de pari pour over/under
@@ -493,9 +712,14 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     is_over_ft = avg_ft_goals > full_time_line
     full_time_label = f"+{full_time_line}" if is_over_ft else f"-{full_time_line}"
     
-    # Afficher les options de paris sous forme de prédictions
-    message.append(f"  • *Mi-temps:* {half_time_label} buts")
-    message.append(f"  • *Temps réglementaire:* {full_time_label} buts")
+    # Ajouter une information sur le nombre moyen de buts
+    message.append(f"  • *Mi-temps:* {half_time_label} buts (moyenne: {avg_ht_goals:.1f})")
+    message.append(f"  • *Temps réglementaire:* {full_time_label} buts (moyenne: {avg_ft_goals:.1f})")
+    
+    # Ajouter le niveau de confiance
+    confidence = prediction.get("confidence_level", 0)
+    confidence_emoji = "✅" if confidence >= 75 else "⚠️" if confidence >= 60 else "❓"
+    message.append(f"  • *Confiance:* {confidence_emoji} {confidence}%")
     message.append("")
     
     # Message de prévention sur les paris sportifs

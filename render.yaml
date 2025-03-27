@@ -13,9 +13,13 @@ services:
       - key: TELEGRAM_TOKEN
         sync: false # Vous ajouterez cette valeur dans l'interface Render
       - key: GOOGLE_CREDENTIALS_JSON
-        sync: false # Vous ajouterez cette valeur dans l'interface Render
+        sync: false # Vous ajouterez cette valeur dans l'interface Render (conservé pour la migration)
       - key: SPREADSHEET_ID
+        sync: false # Vous ajouterez cette valeur dans l'interface Render (conservé pour la migration)
+      - key: MONGODB_URI
         sync: false # Vous ajouterez cette valeur dans l'interface Render
+      - key: MONGODB_DB_NAME
+        value: "fifa_predictor_db"
       - key: DEBUG
         value: "False"
 
@@ -31,9 +35,13 @@ services:
       - key: TELEGRAM_TOKEN
         sync: false # Synchronisé avec le service API
       - key: GOOGLE_CREDENTIALS_JSON
-        sync: false # Synchronisé avec le service API
+        sync: false # Synchronisé avec le service API (conservé pour la migration)
       - key: SPREADSHEET_ID
+        sync: false # Synchronisé avec le service API (conservé pour la migration)
+      - key: MONGODB_URI
         sync: false # Synchronisé avec le service API
+      - key: MONGODB_DB_NAME
+        value: "fifa_predictor_db"
 
   # Service statique pour l'interface web
   - type: static

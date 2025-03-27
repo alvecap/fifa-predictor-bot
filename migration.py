@@ -20,7 +20,7 @@ def get_google_credentials():
     try:
         # Pour le déploiement, nous pouvons recevoir les credentials sous forme de JSON string
         google_creds = os.environ.get('GOOGLE_CREDENTIALS_JSON')
-        if google_creds:
+        if google_creds is not None:
             import tempfile
             from pathlib import Path
             # Créer un fichier temporaire pour stocker les credentials
@@ -40,7 +40,7 @@ def connect_to_sheets():
     """Établit la connexion avec Google Sheets"""
     try:
         credentials_file = get_google_credentials()
-        if not credentials_file:
+        if credentials_file is None:
             logger.error("Impossible de récupérer les credentials Google")
             return None
             
@@ -62,7 +62,7 @@ def connect_to_sheets():
 def get_mongodb_uri():
     """Récupère l'URI de connexion MongoDB depuis les variables d'environnement"""
     uri = os.environ.get('MONGODB_URI')
-    if not uri:
+    if uri is None:
         logger.warning("Variable d'environnement MONGODB_URI non trouvée")
         return None
     return uri
@@ -71,7 +71,7 @@ def connect_to_mongodb():
     """Établit une connexion à la base de données MongoDB"""
     try:
         uri = get_mongodb_uri()
-        if not uri:
+        if uri is None:
             logger.error("URI MongoDB non trouvé")
             return None
             
@@ -404,13 +404,13 @@ def main():
         
         # Se connecter à Google Sheets
         spreadsheet = connect_to_sheets()
-        if not spreadsheet:
+        if spreadsheet is None:
             logger.error("Impossible de se connecter à Google Sheets, arrêt de la migration")
             return False
         
         # Se connecter à MongoDB
         db = connect_to_mongodb()
-        if not db:
+        if db is None:
             logger.error("Impossible de se connecter à MongoDB, arrêt de la migration")
             return False
         

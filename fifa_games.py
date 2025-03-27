@@ -126,6 +126,9 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = query.from_user.id
     username = query.from_user.username
     
+    # Log pour comprendre les callbacks reçus
+    logger.info(f"FIFA Callback reçu: {callback_data} de {username} (ID: {user_id})")
+    
     # Vérifier l'accès utilisateur (sauf pour les admin)
     admin_status = is_admin(user_id, username)
     if not admin_status:
@@ -144,12 +147,6 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         # Lancer la sélection des équipes
         context.user_data["selecting_team1"] = True
         await start_team_selection(query.message, context, edit=True)
-    
-    elif callback_data.startswith("teams_page_"):
-        # Gestion de la pagination pour les équipes
-        page = int(callback_data.split("_")[-1])
-        is_team1 = context.user_data.get("selecting_team1", True)
-        await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
     
     elif callback_data.startswith("select_team1_"):
         # Extraire le nom de l'équipe 1
@@ -328,10 +325,10 @@ async def show_teams_page(message, context, page=0, edit=False, is_team1=True) -
         nav_buttons = []
         
         if page > 0:
-            nav_buttons.append(InlineKeyboardButton("◀️ Précédent", callback_data=f"teams_page_{page-1}"))
+            nav_buttons.append(InlineKeyboardButton("◀️ Précédent", callback_data=f"fifa_page_{page-1}"))
         
         if page < total_pages - 1:
-            nav_buttons.append(InlineKeyboardButton("Suivant ▶️", callback_data=f"teams_page_{page+1}"))
+            nav_buttons.append(InlineKeyboardButton("Suivant ▶️", callback_data=f"fifa_page_{page+1}"))
         
         if nav_buttons:
             team_buttons.append(nav_buttons)
@@ -633,8 +630,32 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     context.user_data["user_id"] = user_id
     context.user_data["username"] = username
     
-    # Log pour debugging
-    logger.info(f"Callback reçu: {data} de l'utilisateur {username} (ID: {user_id})")
+    # Log pour debugging avec plus de détails
+    logger.info(f"Callback principal reçu: '{data}' de l'utilisateur {username} (ID: {user_id})")
+    
+    # Gérer explicitement les callbacks de pagination
+    if data.startswith("fifa_page_"):
+        # Extraire le numéro de page
+        try:
+            page = int(data.split("_")[2])
+            is_team1 = context.user_data.get("selecting_team1", True)
+            
+            # S'assurer que les non-admins ont accès
+            admin_status = is_admin(user_id, username)
+            if not admin_status:
+                has_access = await verify_all_requirements(user_id, username, query.message, context)
+                if not has_access:
+                    return
+                    
+            await query.answer()  # Répondre au callback
+            await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
+            return
+        except Exception as e:
+            logger.error(f"Erreur lors du traitement de fifa_page_: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            await query.answer("Erreur lors du changement de page")
+            return
     
     # Traiter les différents types de callbacks
     if data == "show_games":
@@ -690,6 +711,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.answer("Lien copié dans le presse-papier!")
     else:
         # Commande inconnue
+        logger.warning(f"Callback non reconnu: {data}")
         await query.answer("Action non reconnue")
 
 # Gestionnaire des messages pour les différents jeux

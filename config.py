@@ -11,7 +11,12 @@ def get_env_variable(name, default=None):
 # Token fourni par BotFather (utilise la variable d'environnement)
 TELEGRAM_TOKEN = get_env_variable('TELEGRAM_TOKEN', '')
 
-# Configuration Google Sheets
+# Configuration de base de données
+# Configuration MongoDB (nouvelle)
+MONGODB_URI = get_env_variable('MONGODB_URI', '')
+MONGODB_DB_NAME = get_env_variable('MONGODB_DB_NAME', 'fifa_predictor_db')
+
+# Configuration Google Sheets (ancienne, conservée pour migration/compatibilité)
 # Pour le déploiement, nous pouvons recevoir les credentials sous forme de JSON string
 GOOGLE_CREDENTIALS_JSON = get_env_variable('GOOGLE_CREDENTIALS_JSON')
 if GOOGLE_CREDENTIALS_JSON:
@@ -32,7 +37,7 @@ MAX_PREDICTIONS_HALF_TIME = int(get_env_variable('MAX_PREDICTIONS_HALF_TIME', 3)
 MAX_PREDICTIONS_FULL_TIME = int(get_env_variable('MAX_PREDICTIONS_FULL_TIME', 3))
 
 # Configuration du canal officiel
-OFFICIAL_CHANNEL = "@alvecapital1"
+OFFICIAL_CHANNEL = "@alvecapitalofficiel"  # Uniformisé pour éviter les confusions
 
 # États pour la conversation
 TEAM_INPUT = 1
@@ -69,3 +74,9 @@ HELP_MESSAGE = """
 
 ⚠️ L'abonnement au canal {channel} est requis pour utiliser ces fonctionnalités.
 """.format(channel=OFFICIAL_CHANNEL)
+
+# Nombre maximum de parrainages requis (déplacé ici depuis config_supabase.py)
+MAX_REFERRALS = 1  # Un seul parrainage par utilisateur
+
+# Config pour utiliser MongoDB ou Google Sheets
+USE_MONGODB = True  # Mettre à False pour utiliser Google Sheets

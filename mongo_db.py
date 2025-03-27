@@ -218,12 +218,9 @@ def get_direct_confrontations(matches: List[Dict[str, Any]], team1: str, team2: 
     return confrontations
 
 def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None, prediction_result=None):
-    """Enregistre les prédictions demandées par les utilisateurs"""
-    try:
-        db = get_database()
-        if not db:
-            logger.error("Impossible de se connecter à la base de données")
-            return False
+    """Version qui ne sauvegarde pas l'historique des prédictions"""
+    logger.info(f"Prédiction effectuée par {username} (ID: {user_id}) pour {team1} vs {team2} - non stockée")
+    return True
         
         # Préparer les données de log
         current_date = datetime.now().isoformat()

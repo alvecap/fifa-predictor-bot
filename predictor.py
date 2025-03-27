@@ -4,7 +4,7 @@ from typing import Dict, List, Tuple, Optional, Any
 import math
 import re
 from config import MAX_PREDICTIONS_HALF_TIME, MAX_PREDICTIONS_FULL_TIME
-from database import (
+from database_adapter import (
     get_all_matches_data, get_team_statistics, 
     get_match_id_trends, get_common_scores, get_direct_confrontations
 )

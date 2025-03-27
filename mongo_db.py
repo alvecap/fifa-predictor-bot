@@ -221,29 +221,6 @@ def save_prediction_log(user_id, username, team1, team2, odds1=None, odds2=None,
     """Version qui ne sauvegarde pas l'historique des prédictions"""
     logger.info(f"Prédiction effectuée par {username} (ID: {user_id}) pour {team1} vs {team2} - non stockée")
     return True
-        
-        # Préparer les données de log
-        current_date = datetime.now().isoformat()
-        log_entry = {
-            "date": current_date,
-            "user_id": str(user_id),
-            "username": username or "Inconnu",
-            "team1": team1,
-            "team2": team2,
-            "odds1": str(odds1) if odds1 else "N/A",
-            "odds2": str(odds2) if odds2 else "N/A",
-            "prediction_result": str(prediction_result) if prediction_result else "N/A",
-            "status": "Complété"
-        }
-        
-        # Insérer le log dans la collection
-        result = db.prediction_logs.insert_one(log_entry)
-        
-        logger.info(f"Log enregistré pour la prédiction {team1} vs {team2}")
-        return True
-    except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement du log: {e}")
-        return False
 
 async def check_user_subscription(user_id):
     """
@@ -280,7 +257,7 @@ async def check_user_subscription(user_id):
         return False
 
 # Fonctions pour les utilisateurs
-def register_user(user_id, username, referrer_id=None):
+async def register_user(user_id, username, referrer_id=None):
     """
     Enregistre ou met à jour un utilisateur dans la base de données.
     
@@ -324,7 +301,7 @@ def register_user(user_id, username, referrer_id=None):
                 update_data["$set"]["referred_by"] = str(referrer_id)
                 
                 # Créer la relation de parrainage
-                create_referral_relationship(user_id, referrer_id)
+                await create_referral_relationship(user_id, referrer_id)
             
             db.users.update_one({"user_id": str(user_id)}, update_data)
         else:
@@ -341,14 +318,14 @@ def register_user(user_id, username, referrer_id=None):
             
             # Si un parrain est spécifié, créer la relation
             if referrer_id and referrer_id != user_id:
-                create_referral_relationship(user_id, referrer_id)
+                await create_referral_relationship(user_id, referrer_id)
         
         return True
     except Exception as e:
         logger.error(f"Erreur lors de l'enregistrement de l'utilisateur: {e}")
         return False
 
-def create_referral_relationship(user_id, referrer_id):
+async def create_referral_relationship(user_id, referrer_id):
     """
     Crée une relation de parrainage dans la base de données.
     

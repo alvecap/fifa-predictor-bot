@@ -16,7 +16,7 @@ from config import TELEGRAM_TOKEN, WELCOME_MESSAGE
 from admin_access import is_admin
 from verification import (
     verify_subscription, verify_referral, send_subscription_required, 
-    send_referral_required, verify_all_requirements, show_games_menu
+    send_referral_required, verify_all_requirements
 )
 from referral_system import (
     register_user, generate_referral_link,
@@ -38,6 +38,56 @@ logger = logging.getLogger(__name__)
 # États de conversation pour les jeux
 BACCARAT_INPUT = 1
 ODDS_INPUT = 2
+
+# Affichage du menu principal des jeux (simplifié et robuste)
+async def show_games_menu(message, context) -> None:
+    """
+    Affiche le menu principal avec tous les jeux disponibles.
+    Version simplifiée et robuste pour éviter les erreurs.
+    """
+    try:
+        # Texte du menu simplifié
+        menu_text = (
+            "🎮 *FIFA GAMES - Menu Principal* 🎮\n\n"
+            "Choisissez un jeu pour obtenir des prédictions :\n\n"
+            "🏆 *FIFA 4x4 Predictor*\n"
+            "_Prédictions précises basées sur des statistiques réelles_\n\n"
+            "🍎 *Apple of Fortune*\n"
+            "_Trouvez la bonne pomme grâce à notre système prédictif_\n\n"
+            "🃏 *Baccarat*\n"
+            "_Anticipez le gagnant avec notre technologie d'analyse_"
+        )
+        
+        # Boutons pour accéder aux différents jeux
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Message avec le menu
+        if hasattr(message, 'edit_text'):
+            await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await message.reply_text(menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+            
+    except Exception as e:
+        # Log complet de l'erreur
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Erreur détaillée dans show_games_menu: {error_trace}")
+        
+        # Message d'erreur avec plus de détails
+        error_message = f"Une erreur s'est produite lors du chargement du menu: {str(e)}"
+        logger.error(error_message)
+        
+        try:
+            await message.reply_text(
+                "Désolé, une erreur s'est produite lors du chargement du menu des jeux. Veuillez réessayer."
+            )
+        except Exception:
+            logger.error("Impossible d'envoyer le message d'erreur")
 
 # Fonction pour le jeu FIFA 4x4
 async def start_fifa_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -657,19 +707,6 @@ async def games_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     # Pour tout le monde, afficher directement le menu des jeux
     await show_games_menu(update.message, context)
-    
-    # Vérifier si c'est un admin
-    admin_status = is_admin(user_id, username)
-    if admin_status:
-        logger.info(f"Commande /games par l'administrateur {username} (ID: {user_id})")
-        # Pour les admins, afficher directement le menu des jeux
-        await show_games_menu(update.message, context)
-        return
-    
-    # Pour les non-admins, vérifier les conditions d'accès
-    has_access = await verify_all_requirements(user_id, username, update.message, context)
-    if has_access:
-        await show_games_menu(update.message, context)
 
 # Commande pour vérifier l'abonnement au canal
 async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -679,7 +716,6 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     await verify_subscription(update.message, user_id, username, context)
 
-# Fonction principale pour démarrer le bot
 # Fonction principale pour démarrer le bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Point d'entrée personnalisé depuis fifa_games.py"""
@@ -693,12 +729,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     admin_status = is_admin(user_id, username)
     if admin_status:
         logger.info(f"Commande /start par l'administrateur {username} (ID: {user_id})")
-        # Pour les admins, afficher directement le menu des jeux
-        await show_games_menu(update.message, context)
+        
+        # Créer un bouton direct pour chaque jeu (contournement pour éviter les erreurs)
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "🔑 *Accès administrateur*\n\n"
+            "Sélectionnez directement un jeu:",
+            parse_mode='Markdown',
+            reply_markup=reply_markup
+        )
         return
-    
-    # Traiter de la même manière que le bot standard pour les non-admins
+        
+    # Pour les non-admins, traiter de la même manière que le bot standard
     await bot_start(update, context)
+
 # Fonction principale
 def main() -> None:
     """Démarre le bot."""

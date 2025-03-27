@@ -7,3 +7,5 @@ gunicorn
 supabase>=0.7.1
 httpx[http2]>=0.24.0
 pip>=25.0.1
+pymongo>=4.3.0
+dnspython>=2.3.0

@@ -154,7 +154,7 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data["team1"] = team1
         context.user_data["selecting_team1"] = False
         
-        # Animation de sélection
+        # Animation rapide (1 sec)
         anim_frames = [
             f"✅ *{team1}* sélectionné!",
             f"✅ *{team1}* ✅",
@@ -163,7 +163,7 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         
         for frame in anim_frames:
             await query.edit_message_text(frame, parse_mode='Markdown')
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)  # Animation très rapide
         
         # Puis passer à la sélection de l'équipe 2
         await start_team2_selection(query.message, context, edit=True)
@@ -184,7 +184,7 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         # Sauvegarder l'équipe 2
         context.user_data["team2"] = team2
         
-        # Animation de sélection
+        # Animation rapide (1 sec)
         anim_frames = [
             f"✅ *{team2}* sélectionné!",
             f"✅ *{team2}* ✅",
@@ -193,7 +193,7 @@ async def handle_fifa_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         
         for frame in anim_frames:
             await query.edit_message_text(frame, parse_mode='Markdown')
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.1)  # Animation très rapide
         
         # Demander la première cote
         await query.edit_message_text(
@@ -436,7 +436,7 @@ async def handle_odds_team1_input(update: Update, context: ContextTypes.DEFAULT_
         )
         
         # Demander la cote de l'équipe 2
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.2)  # Délai réduit à 0.2 sec
         await loading_message.edit_text(
             f"💰 *Saisie des cotes (obligatoire)*\n\n"
             f"Match: *{team1}* vs *{team2}*\n\n"
@@ -504,14 +504,14 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             parse_mode='Markdown'
         )
         
-        # Animation de génération de prédiction
-        await asyncio.sleep(0.3)
+        # Animation de génération de prédiction (3 secondes total max)
+        await asyncio.sleep(0.2)
         await loading_message.edit_text(
             "🧠 *Analyse des données en cours...*",
             parse_mode='Markdown'
         )
         
-        # Animation stylisée pour l'analyse
+        # Animation stylisée pour l'analyse (répartir 2 sec sur 4 étapes)
         analysis_frames = [
             "📊 *Analyse des performances historiques...*",
             "🏆 *Analyse des confrontations directes...*",
@@ -520,7 +520,7 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
         ]
         
         for frame in analysis_frames:
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.5)  # 0.5 sec * 4 frames = 2 sec
             await loading_message.edit_text(frame, parse_mode='Markdown')
         
         # Génération de la prédiction
@@ -552,14 +552,14 @@ async def handle_odds_team2_input(update: Update, context: ContextTypes.DEFAULT_
             # Formater et envoyer la prédiction
             prediction_text = format_prediction_message(prediction)
             
-            # Animation finale avant d'afficher le résultat
+            # Animation finale avant d'afficher le résultat (0.8 sec total)
             final_frames = [
                 "🎯 *Prédiction prête!*",
                 "✨ *Affichage des résultats...*"
             ]
             
             for frame in final_frames:
-                await asyncio.sleep(0.3)
+                await asyncio.sleep(0.4)  # 0.4 sec * 2 frames = 0.8 sec
                 await loading_message.edit_text(frame, parse_mode='Markdown')
             
             # Proposer une nouvelle prédiction
@@ -633,6 +633,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # Log pour debugging avec plus de détails
     logger.info(f"Callback principal reçu: '{data}' de l'utilisateur {username} (ID: {user_id})")
     
+    # Traiter explicitement les callbacks de sélection d'équipe
+    if data.startswith("select_team1_") or data.startswith("select_team2_"):
+        await handle_fifa_callback(update, context)
+        return
+    
     # Gérer explicitement les callbacks de pagination
     if data.startswith("fifa_page_"):
         # Extraire le numéro de page
@@ -648,6 +653,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     return
                     
             await query.answer()  # Répondre au callback
+            # Afficher rapidement la page suivante sans délai
             await show_teams_page(query.message, context, page, edit=True, is_team1=is_team1)
             return
         except Exception as e:

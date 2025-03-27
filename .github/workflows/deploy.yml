@@ -1,19 +1,187 @@
-name: Deploy to Render
+#!/usr/bin/env python
+"""
+Script d'initialisation pour le déploiement
+Ce script s'exécute au démarrage du service sur Render et gère:
+1. La migration des données de Google Sheets vers MongoDB (si nécessaire)
+2. La création des index MongoDB nécessaires
+"""
 
-on:
-  push:
-    branches:
-      - main  # ou master, selon votre branche principale
+import os
+import logging
+import argparse
+import sys
+from config import USE_MONGODB
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      
-      - name: Deploy to Render
-        uses: johnbeynon/render-deploy-action@v0.0.8
-        with:
-          service-id: ${{ secrets.RENDER_SERVICE_ID }}  # ID du service sur Render
-          api-key: ${{ secrets.RENDER_API_KEY }}  # Clé API Render
+# Configuration du logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def check_mongodb_connection():
+    """Vérifie si la connexion à MongoDB fonctionne"""
+    try:
+        from mongo_db import get_db_connection
+        client = get_db_connection()
+        if client:
+            # Vérifier la connexion
+            client.admin.command('ping')
+            logger.info("Connexion à MongoDB établie avec succès")
+            return True
+        else:
+            logger.error("Impossible d'obtenir une connexion MongoDB")
+            return False
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification de la connexion MongoDB: {e}")
+        return False
+
+def check_mongodb_data():
+    """Vérifie si des données existent déjà dans MongoDB"""
+    try:
+        from mongo_db import get_database
+        db = get_database()
+        if not db:
+            logger.error("Impossible d'obtenir la base de données MongoDB")
+            return False
+        
+        # Vérifier si des collections existent et contiennent des données
+        matches_count = db.matches.count_documents({})
+        users_count = db.users.count_documents({})
+        referrals_count = db.referrals.count_documents({})
+        
+        logger.info(f"Collections MongoDB: matches={matches_count}, users={users_count}, referrals={referrals_count}")
+        
+        # S'il y a au moins des matches, on considère que les données sont déjà migrées
+        return matches_count > 0
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification des données MongoDB: {e}")
+        return False
+
+def check_gsheets_connection():
+    """Vérifie si la connexion à Google Sheets fonctionne"""
+    try:
+        from migration import connect_to_sheets
+        spreadsheet = connect_to_sheets()
+        if spreadsheet:
+            logger.info(f"Connexion à Google Sheets établie avec succès: {spreadsheet.title}")
+            return True
+        else:
+            logger.error("Impossible d'obtenir une connexion Google Sheets")
+            return False
+    except Exception as e:
+        logger.error(f"Erreur lors de la vérification de la connexion Google Sheets: {e}")
+        return False
+
+def run_migration():
+    """Exécute la migration complète de Google Sheets vers MongoDB"""
+    try:
+        logger.info("Lancement de la migration Google Sheets vers MongoDB...")
+        
+        # Importer le script de migration
+        from migration import main as migration_main
+        
+        # Exécuter la migration
+        success = migration_main()
+        
+        if success:
+            logger.info("Migration terminée avec succès!")
+            return True
+        else:
+            logger.error("La migration a échoué")
+            return False
+    except Exception as e:
+        logger.error(f"Erreur lors de la migration: {e}")
+        return False
+
+def create_mongodb_indexes():
+    """Crée les index nécessaires dans MongoDB"""
+    try:
+        from mongo_db import get_database
+        
+        logger.info("Création des index MongoDB...")
+        
+        db = get_database()
+        if not db:
+            logger.error("Impossible d'obtenir la base de données MongoDB")
+            return False
+        
+        # Index pour les matchs
+        db.matches.create_index("match_id")
+        db.matches.create_index("team_home")
+        db.matches.create_index("team_away")
+        
+        # Index pour les utilisateurs
+        db.users.create_index("user_id", unique=True)
+        db.users.create_index("username")
+        db.users.create_index("referred_by")
+        
+        # Index pour les parrainages
+        db.referrals.create_index([("referrer_id", 1), ("referred_id", 1)], unique=True)
+        db.referrals.create_index("verified")
+        
+        # Index pour les logs de prédictions
+        db.prediction_logs.create_index("user_id")
+        db.prediction_logs.create_index("date")
+        
+        logger.info("Création des index MongoDB terminée avec succès")
+        return True
+    except Exception as e:
+        logger.error(f"Erreur lors de la création des index MongoDB: {e}")
+        return False
+
+def main():
+    """Fonction principale"""
+    parser = argparse.ArgumentParser(description='Script d\'initialisation pour le déploiement')
+    parser.add_argument('--force-migration', action='store_true', help='Forcer la migration même si des données existent déjà')
+    parser.add_argument('--skip-migration', action='store_true', help='Ignorer la migration')
+    args = parser.parse_args()
+    
+    logger.info("Démarrage du script d'initialisation...")
+    
+    # Vérifier si MongoDB est configuré
+    if not USE_MONGODB:
+        logger.info("MongoDB n'est pas activé dans la configuration. Démarrage sans migration.")
+        return True
+    
+    # Vérifier la connexion à MongoDB
+    if not check_mongodb_connection():
+        logger.error("Impossible de se connecter à MongoDB. Vérifiez les paramètres de connexion.")
+        return False
+    
+    # Créer les index MongoDB (toujours utile même si la migration est ignorée)
+    create_mongodb_indexes()
+    
+    # Si on doit ignorer la migration
+    if args.skip_migration:
+        logger.info("Migration ignorée (--skip-migration)")
+        return True
+    
+    # Vérifier s'il y a déjà des données
+    data_exists = check_mongodb_data()
+    
+    if data_exists and not args.force_migration:
+        logger.info("Des données existent déjà dans MongoDB. Migration ignorée. Utilisez --force-migration pour forcer.")
+        return True
+    
+    # Vérifier la connexion à Google Sheets
+    if not check_gsheets_connection():
+        logger.error("Impossible de se connecter à Google Sheets. Vérifiez les credentials.")
+        return False
+    
+    # Lancer la migration
+    success = run_migration()
+    
+    if success:
+        logger.info("Initialisation terminée avec succès!")
+    else:
+        logger.error("Échec de l'initialisation")
+    
+    return success
+
+if __name__ == "__main__":
+    success = main()
+    sys.exit(0 if success else 1)

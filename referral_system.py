@@ -3,9 +3,7 @@ import asyncio
 from datetime import datetime
 from telegram import Bot
 from telegram.error import TelegramError
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from config import TELEGRAM_TOKEN, CREDENTIALS_FILE, SPREADSHEET_ID, MAX_REFERRALS, OFFICIAL_CHANNEL
+from config import TELEGRAM_TOKEN, OFFICIAL_CHANNEL, MAX_REFERRALS
 from admin_access import is_admin
 
 # Configuration du logging
@@ -15,17 +13,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Connexion à Google Sheets
-def connect_to_sheets():
-    """Établit la connexion avec Google Sheets"""
-    try:
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, scope)
-        client = gspread.authorize(credentials)
-        return client.open_by_key(SPREADSHEET_ID)
-    except Exception as e:
-        logger.error(f"Erreur de connexion à Google Sheets: {e}")
-        raise
+# Importer l'adaptateur de base de données pour MongoDB
+# Cela remplace tous les appels directs à Google Sheets
+from database_adapter import (
+    get_database, check_user_subscription, count_referrals, get_max_referrals
+)
 
 async def register_user(user_id, username, referrer_id=None):
     """
@@ -47,47 +39,45 @@ async def register_user(user_id, username, referrer_id=None):
             # Les admins n'ont pas besoin d'être enregistrés pour les parrainages
             return True
             
-        # Connexion à Google Sheets
-        spreadsheet = connect_to_sheets()
-        
-        # Récupérer ou créer la feuille des utilisateurs
-        try:
-            users_sheet = spreadsheet.worksheet("Utilisateurs")
-        except gspread.exceptions.WorksheetNotFound:
-            # Si la feuille n'existe pas, on la crée
-            users_sheet = spreadsheet.add_worksheet(title="Utilisateurs", rows=1000, cols=5)
-            # Ajouter les en-têtes
-            users_sheet.update('A1:E1', [['ID Telegram', 'Username', 'Date d\'inscription', 'Dernière activité', 'Parrainé par']])
+        # Utiliser MongoDB via l'adaptateur
+        db = get_database()
+        if db is None:
+            logger.error("Impossible de se connecter à la base de données pour enregistrer l'utilisateur")
+            return False
         
         # Vérifier si l'utilisateur existe déjà
-        try:
-            user_cell = users_sheet.find(str(user_id))
-            # Utilisateur trouvé, mise à jour
-            row_index = user_cell.row
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        existing_user = db.users.find_one({"user_id": str(user_id)})
+        current_time = datetime.now().isoformat()
+        
+        if existing_user is not None:
+            # Si l'utilisateur existe, mise à jour
+            update_data = {
+                "$set": {
+                    "username": username or "Inconnu",
+                    "last_activity": current_time
+                }
+            }
             
-            # Mettre à jour le nom d'utilisateur et la date d'activité
-            users_sheet.update_cell(row_index, 2, username or "Inconnu")
-            users_sheet.update_cell(row_index, 4, current_time)
+            # Si un parrain est spécifié et que l'utilisateur n'a pas déjà un parrain
+            if referrer_id and referrer_id != user_id and (not existing_user.get("referred_by")):
+                update_data["$set"]["referred_by"] = str(referrer_id)
+                
+                # Créer la relation de parrainage
+                await create_referral_relationship(user_id, referrer_id)
             
-            # Si un parrain est spécifié et que ce n'est pas déjà enregistré, le mettre à jour
-            if referrer_id and referrer_id != user_id:
-                current_referrer = users_sheet.cell(row_index, 5).value
-                # Vérifier si l'utilisateur a déjà un parrain
-                if not current_referrer:
-                    users_sheet.update_cell(row_index, 5, str(referrer_id))
-                    logger.info(f"Parrain ajouté pour l'utilisateur {user_id}: {referrer_id}")
-                    
-                    # Créer la relation de parrainage
-                    await create_referral_relationship(user_id, referrer_id)
-                elif current_referrer != str(referrer_id):
-                    logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {current_referrer}, ne pas changer le parrainage")
+            db.users.update_one({"user_id": str(user_id)}, update_data)
+            logger.info(f"Utilisateur mis à jour: {username} (ID: {user_id})")
+        else:
+            # Si l'utilisateur n'existe pas, ajout
+            new_user = {
+                "user_id": str(user_id),
+                "username": username or "Inconnu",
+                "registration_date": current_time,
+                "last_activity": current_time,
+                "referred_by": str(referrer_id) if referrer_id and referrer_id != user_id else None
+            }
             
-        except gspread.exceptions.CellNotFound:
-            # Utilisateur non trouvé, ajout
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            new_row = [str(user_id), username or "Inconnu", current_time, current_time, str(referrer_id) if referrer_id and referrer_id != user_id else ""]
-            users_sheet.append_row(new_row)
+            db.users.insert_one(new_user)
             logger.info(f"Nouvel utilisateur enregistré: {username} (ID: {user_id})")
             
             # Si un parrain est spécifié, créer la relation de parrainage
@@ -101,7 +91,7 @@ async def register_user(user_id, username, referrer_id=None):
 
 async def create_referral_relationship(user_id, referrer_id):
     """
-    Crée une relation de parrainage dans la feuille de calcul.
+    Crée une relation de parrainage dans la base de données.
     
     Args:
         user_id (int): ID Telegram de l'utilisateur parrainé
@@ -114,59 +104,55 @@ async def create_referral_relationship(user_id, referrer_id):
             # Les admins n'ont pas besoin de relations de parrainage
             return
             
-        # Connexion à Google Sheets
-        spreadsheet = connect_to_sheets()
+        # Utiliser MongoDB via l'adaptateur
+        db = get_database()
+        if db is None:
+            logger.error("Impossible de se connecter à la base de données pour créer un parrainage")
+            return
         
-        # Récupérer ou créer la feuille des parrainages
-        try:
-            referrals_sheet = spreadsheet.worksheet("Parrainages")
-        except gspread.exceptions.WorksheetNotFound:
-            # Si la feuille n'existe pas, on la crée
-            referrals_sheet = spreadsheet.add_worksheet(title="Parrainages", rows=1000, cols=5)
-            # Ajouter les en-têtes
-            referrals_sheet.update('A1:E1', [['Parrain ID', 'Filleul ID', 'Date', 'Vérifié', 'Date de vérification']])
+        # Vérifier si la relation existe déjà
+        existing_referral = db.referrals.find_one({
+            "referrer_id": str(referrer_id),
+            "referred_id": str(user_id)
+        })
         
-        # Vérifier si la relation de parrainage existe déjà
-        try:
-            # Chercher à la fois le parrain et le filleul pour être sûr
-            referrals = referrals_sheet.get_all_values()
-            relationship_exists = False
-            
-            # Vérifier si le filleul est déjà parrainé par quelqu'un d'autre
-            other_referrer_exists = False
-            for row in referrals[1:]:  # Ignorer l'en-tête
-                if len(row) >= 2:
-                    # Vérifier si cette relation existe déjà
-                    if row[0] == str(referrer_id) and row[1] == str(user_id):
-                        relationship_exists = True
-                        break
-                    # Vérifier si le filleul est déjà parrainé par quelqu'un d'autre
-                    if row[1] == str(user_id) and row[0] != str(referrer_id):
-                        other_referrer_exists = True
-                        logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {row[0]}")
-            
+        if existing_referral is None:
             # Vérifier s'il n'y a pas de boucle de parrainage (A parraine B qui parraine A)
-            boucle_parrainage = False
-            for row in referrals[1:]:  # Ignorer l'en-tête
-                if len(row) >= 2 and row[0] == str(user_id) and row[1] == str(referrer_id):
-                    boucle_parrainage = True
-                    logger.warning(f"Boucle de parrainage détectée: {user_id} et {referrer_id} se parrainent mutuellement")
-                    break
+            reverse_relation = db.referrals.find_one({
+                "referrer_id": str(user_id),
+                "referred_id": str(referrer_id)
+            })
             
-            if not relationship_exists and not other_referrer_exists and not boucle_parrainage:
-                # Créer la relation
-                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                new_row = [str(referrer_id), str(user_id), current_time, "Non", ""]
-                referrals_sheet.append_row(new_row)
-                logger.info(f"Relation de parrainage créée: Parrain {referrer_id} -> Filleul {user_id}")
-                
-                # Lancer la vérification d'abonnement en arrière-plan avec un délai plus long
-                asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
-            elif relationship_exists:
-                logger.info(f"Relation de parrainage déjà existante: {referrer_id} -> {user_id}")
-        
-        except Exception as e:
-            logger.error(f"Erreur lors de la recherche ou création de la relation de parrainage: {e}")
+            if reverse_relation is not None:
+                logger.warning(f"Boucle de parrainage détectée: {user_id} et {referrer_id} se parrainent mutuellement")
+                return
+            
+            # Vérifier si l'utilisateur est déjà parrainé par quelqu'un d'autre
+            other_referrer = db.referrals.find_one({
+                "referred_id": str(user_id)
+            })
+            
+            if other_referrer is not None and other_referrer["referrer_id"] != str(referrer_id):
+                logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {other_referrer['referrer_id']}")
+                return
+            
+            # Créer la relation de parrainage
+            current_time = datetime.now().isoformat()
+            new_referral = {
+                "referrer_id": str(referrer_id),
+                "referred_id": str(user_id),
+                "date": current_time,
+                "verified": False,
+                "verification_date": None
+            }
+            
+            db.referrals.insert_one(new_referral)
+            logger.info(f"Relation de parrainage créée: Parrain {referrer_id} -> Filleul {user_id}")
+            
+            # Lancer la vérification d'abonnement en arrière-plan
+            asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
+        else:
+            logger.info(f"Relation de parrainage déjà existante: {referrer_id} -> {user_id}")
     
     except Exception as e:
         logger.error(f"Erreur lors de la création de la relation de parrainage: {e}")
@@ -180,97 +166,59 @@ async def verify_and_update_referral(user_id, referrer_id):
         referrer_id (int): ID Telegram du parrain
     """
     try:
-        # Attendre 30 secondes avant de vérifier (laisser plus de temps à l'utilisateur pour s'abonner)
-        await asyncio.sleep(30)
+        # Attendre 10 secondes avant de vérifier (réduit de 30 à 10 pour améliorer la réactivité)
+        await asyncio.sleep(10)
         
         # Vérifier l'abonnement
-        is_subscribed = await check_channel_subscription(user_id)
+        is_subscribed = await check_user_subscription(user_id)
         logger.info(f"Vérification d'abonnement pour user {user_id}: {is_subscribed}")
         
         if is_subscribed:
-            try:
-                # Connexion à Google Sheets
-                spreadsheet = connect_to_sheets()
-                referrals_sheet = spreadsheet.worksheet("Parrainages")
-                
-                # Trouver la relation de parrainage
-                referrals = referrals_sheet.get_all_values()
-                relationship_found = False
-                
-                for i, row in enumerate(referrals[1:], start=2):  # Start=2 pour tenir compte de l'en-tête
-                    if len(row) >= 2 and row[0] == str(referrer_id) and row[1] == str(user_id):
-                        # Mettre à jour le statut de vérification
-                        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        referrals_sheet.update_cell(i, 4, "Oui")
-                        referrals_sheet.update_cell(i, 5, current_time)
-                        logger.info(f"Parrainage vérifié: {referrer_id} -> {user_id}")
-                        relationship_found = True
-                        
-                        # Notification au parrain
-                        try:
-                            bot = Bot(token=TELEGRAM_TOKEN)
-                            referral_count = await count_referrals(referrer_id)
-                            
-                            await bot.send_message(
-                                chat_id=referrer_id,
-                                text=f"🎉 *Félicitations!* Un nouvel utilisateur a utilisé votre lien et s'est abonné au canal.\n\n"
-                                     f"Vous avez maintenant *{referral_count}/{MAX_REFERRALS}* parrainages vérifiés.",
-                                parse_mode='Markdown'
-                            )
-                            logger.info(f"Notification envoyée au parrain {referrer_id}")
-                        except Exception as e:
-                            logger.error(f"Erreur lors de l'envoi de la notification au parrain: {e}")
-                        
-                        break
-                
-                if not relationship_found:
-                    logger.warning(f"Relation de parrainage non trouvée lors de la vérification: {referrer_id} -> {user_id}")
+            db = get_database()
+            if db is None:
+                logger.error("Impossible de se connecter à la base de données pour vérifier un parrainage")
+                return
             
-            except Exception as e:
-                logger.error(f"Erreur lors de la mise à jour du statut de parrainage: {e}")
+            # Mettre à jour le statut de vérification
+            current_time = datetime.now().isoformat()
+            result = db.referrals.update_one(
+                {
+                    "referrer_id": str(referrer_id),
+                    "referred_id": str(user_id)
+                },
+                {
+                    "$set": {
+                        "verified": True,
+                        "verification_date": current_time
+                    }
+                }
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"Parrainage vérifié: {referrer_id} -> {user_id}")
+                
+                # Notification au parrain
+                try:
+                    from telegram import Bot
+                    
+                    bot = Bot(token=TELEGRAM_TOKEN)
+                    referral_count = await count_referrals(referrer_id)
+                    
+                    await bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎉 *Félicitations!* Un nouvel utilisateur a utilisé votre lien et s'est abonné au canal.\n\n"
+                             f"Vous avez maintenant *{referral_count}/{await get_max_referrals()}* parrainages vérifiés.",
+                        parse_mode='Markdown'
+                    )
+                except Exception as e:
+                    logger.error(f"Erreur lors de l'envoi de la notification au parrain: {e}")
+            else:
+                logger.warning(f"Aucune mise à jour du statut de parrainage pour {referrer_id} -> {user_id}")
         else:
             logger.info(f"Utilisateur {user_id} non abonné, parrainage non vérifié")
     
     except Exception as e:
         logger.error(f"Erreur lors de la vérification du parrainage: {e}")
-
-async def check_channel_subscription(user_id, channel_id=None):
-    """
-    Vérifie si un utilisateur est abonné à un canal Telegram spécifique.
-    
-    Args:
-        user_id (int): ID de l'utilisateur Telegram
-        channel_id (str): ID du canal à vérifier (utilise OFFICIAL_CHANNEL par défaut)
-        
-    Returns:
-        bool: True si l'utilisateur est abonné ou admin, False sinon
-    """
-    try:
-        # Vérifier si c'est un admin
-        if is_admin(user_id):
-            logger.info(f"Vérification d'abonnement contournée pour l'admin (ID: {user_id})")
-            return True
-            
-        # Utiliser le canal défini dans la configuration
-        if channel_id is None:
-            channel_id = OFFICIAL_CHANNEL
-        
-        bot = Bot(token=TELEGRAM_TOKEN)
-        
-        # Vérifier si l'utilisateur est membre du canal
-        chat_member = await bot.get_chat_member(chat_id=channel_id, user_id=user_id)
-        
-        # Les statuts qui indiquent une adhésion active au canal
-        valid_statuses = ['creator', 'administrator', 'member']
-        
-        is_member = chat_member.status in valid_statuses
-        logger.info(f"Utilisateur {user_id} est{'' if is_member else ' non'} abonné au canal {channel_id}")
-        
-        return is_member
-    
-    except TelegramError as e:
-        logger.error(f"Erreur lors de la vérification de l'abonnement: {e}")
-        return False
 
 async def has_completed_referrals(user_id, username=None):
     """
@@ -290,58 +238,15 @@ async def has_completed_referrals(user_id, username=None):
             return True
         
         referral_count = await count_referrals(user_id)
-        completed = referral_count >= MAX_REFERRALS
+        max_referrals = await get_max_referrals()
         
-        logger.info(f"Utilisateur {user_id} a {referral_count}/{MAX_REFERRALS} parrainages - Statut: {'Complété' if completed else 'En cours'}")
+        completed = referral_count >= max_referrals
+        logger.info(f"Utilisateur {user_id} a {referral_count}/{max_referrals} parrainages - Statut: {'Complété' if completed else 'En cours'}")
         
         return completed
     except Exception as e:
         logger.error(f"Erreur lors de la vérification des parrainages: {e}")
         return False
-
-async def count_referrals(user_id):
-    """
-    Compte le nombre de parrainages vérifiés pour un utilisateur.
-    
-    Args:
-        user_id (int): ID Telegram de l'utilisateur
-        
-    Returns:
-        int: Le nombre de parrainages vérifiés
-    """
-    try:
-        # Vérifier si c'est un admin
-        if is_admin(user_id):
-            logger.info(f"Comptage de parrainage contourné pour l'admin (ID: {user_id})")
-            # Pour un admin, on retourne un nombre suffisant pour valider
-            return MAX_REFERRALS
-        
-        # Connexion à Google Sheets
-        spreadsheet = connect_to_sheets()
-        
-        try:
-            referrals_sheet = spreadsheet.worksheet("Parrainages")
-            
-            # Récupérer tous les parrainages
-            referrals = referrals_sheet.get_all_values()
-            
-            # Compter les parrainages vérifiés où l'utilisateur est le parrain
-            count = 0
-            for row in referrals[1:]:  # Ignorer l'en-tête
-                if len(row) >= 4 and row[0] == str(user_id) and row[3] == "Oui":
-                    count += 1
-            
-            logger.info(f"Utilisateur {user_id} a {count} parrainages vérifiés")
-            return count
-        
-        except gspread.exceptions.WorksheetNotFound:
-            # La feuille n'existe pas, donc aucun parrainage
-            logger.warning("Feuille 'Parrainages' non trouvée")
-            return 0
-    
-    except Exception as e:
-        logger.error(f"Erreur lors du comptage des parrainages: {e}")
-        return 0
 
 async def get_referred_users(user_id):
     """
@@ -357,59 +262,35 @@ async def get_referred_users(user_id):
         # Vérifier si c'est un admin
         if is_admin(user_id):
             logger.info(f"Récupération des parrainages contournée pour l'admin (ID: {user_id})")
-            # Pour un admin, on retourne une liste vide
             return []
         
-        # Connexion à Google Sheets
-        spreadsheet = connect_to_sheets()
-        
-        try:
-            referrals_sheet = spreadsheet.worksheet("Parrainages")
-            users_sheet = spreadsheet.worksheet("Utilisateurs")
-            
-            # Récupérer tous les parrainages
-            referrals = referrals_sheet.get_all_values()
-            
-            # Filtrer les parrainages où l'utilisateur est le parrain
-            referred_user_ids = []
-            referred_status = {}
-            
-            for row in referrals[1:]:  # Ignorer l'en-tête
-                if len(row) >= 4 and row[0] == str(user_id):
-                    filleul_id = row[1]
-                    referred_user_ids.append(filleul_id)
-                    referred_status[filleul_id] = row[3] == "Oui"  # Vérification du statut "Oui"
-            
-            # Récupérer les informations des utilisateurs parrainés
-            referred_users = []
-            
-            for filleul_id in referred_user_ids:
-                try:
-                    user_cell = users_sheet.find(filleul_id)
-                    row_values = users_sheet.row_values(user_cell.row)
-                    
-                    # S'assurer qu'il y a suffisamment de valeurs
-                    if len(row_values) >= 2:
-                        username = row_values[1]
-                        referred_users.append({
-                            'id': filleul_id,
-                            'username': username,
-                            'is_verified': referred_status.get(filleul_id, False)
-                        })
-                except gspread.exceptions.CellNotFound:
-                    # Utilisateur non trouvé
-                    referred_users.append({
-                        'id': filleul_id,
-                        'username': 'Inconnu',
-                        'is_verified': referred_status.get(filleul_id, False)
-                    })
-            
-            return referred_users
-        
-        except gspread.exceptions.WorksheetNotFound:
-            # Une ou les deux feuilles n'existent pas
-            logger.warning("Feuilles nécessaires non trouvées")
+        # Utiliser MongoDB via l'adaptateur
+        db = get_database()
+        if db is None:
+            logger.error("Impossible de se connecter à la base de données pour récupérer les parrainages")
             return []
+        
+        # Récupérer les parrainages
+        referrals = list(db.referrals.find({"referrer_id": str(user_id)}))
+        
+        referred_users = []
+        for referral in referrals:
+            referred_id = referral.get("referred_id")
+            if referred_id:
+                # Récupérer l'information de l'utilisateur parrainé
+                user_info = db.users.find_one({"user_id": referred_id})
+                
+                username = "Inconnu"
+                if user_info is not None and "username" in user_info:
+                    username = user_info["username"]
+                
+                referred_users.append({
+                    'id': referred_id,
+                    'username': username,
+                    'is_verified': referral.get("verified", False)
+                })
+        
+        return referred_users
     
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des utilisateurs parrainés: {e}")

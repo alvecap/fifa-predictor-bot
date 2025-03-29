@@ -1,9 +1,12 @@
 import logging
 import asyncio
-from datetime import datetime
-from telegram import Bot
-from telegram.error import TelegramError
-from config import TELEGRAM_TOKEN, OFFICIAL_CHANNEL, MAX_REFERRALS
+from typing import Optional, Callable, Any
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from telegram.ext import ContextTypes
+import time
+
+# Utiliser le nouvel adaptateur de base de données
+from database_adapter import check_user_subscription, has_completed_referrals, count_referrals, get_max_referrals
 from admin_access import is_admin
 
 # Configuration du logging
@@ -13,314 +16,411 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Importer l'adaptateur de base de données pour MongoDB
-# Cela remplace tous les appels directs à Google Sheets
-from database_adapter import (
-    get_database, check_user_subscription, count_referrals, get_max_referrals
-)
+# Système de gestion des requêtes API
+_api_queue = []  # File d'attente des requêtes API
+_api_processing = False  # Indique si le traitement de la file est en cours
+_MAX_API_REQUESTS_PER_SECOND = 28  # Limite de requêtes par seconde
 
-async def register_user(user_id, username, referrer_id=None):
-    """
-    Enregistre ou met à jour un utilisateur dans la base de données.
-    Si referrer_id est fourni, crée une relation de parrainage.
+async def process_api_queue():
+    """Traite la file d'attente des requêtes API Telegram en respectant les limites de débit"""
+    global _api_processing
     
-    Args:
-        user_id (int): ID Telegram de l'utilisateur
-        username (str): Nom d'utilisateur Telegram
-        referrer_id (int, optional): ID Telegram du parrain
+    if _api_processing:
+        return  # Éviter les exécutions parallèles
     
-    Returns:
-        bool: True si l'opération a réussi, False sinon
-    """
+    _api_processing = True
+    
     try:
-        # Vérifier si c'est un admin
-        if is_admin(user_id, username):
-            logger.info(f"Enregistrement d'un administrateur: {username} (ID: {user_id})")
-            # Les admins n'ont pas besoin d'être enregistrés pour les parrainages
-            return True
+        while _api_queue:
+            # Traiter 28 requêtes par seconde maximum
+            batch = _api_queue[:_MAX_API_REQUESTS_PER_SECOND]
+            _api_queue[:_MAX_API_REQUESTS_PER_SECOND] = []
             
-        # Utiliser MongoDB via l'adaptateur
-        db = get_database()
-        if db is None:
-            logger.error("Impossible de se connecter à la base de données pour enregistrer l'utilisateur")
-            return False
-        
-        # Vérifier si l'utilisateur existe déjà
-        existing_user = db.users.find_one({"user_id": str(user_id)})
-        current_time = datetime.now().isoformat()
-        
-        if existing_user is not None:
-            # Si l'utilisateur existe, mise à jour
-            update_data = {
-                "$set": {
-                    "username": username or "Inconnu",
-                    "last_activity": current_time
-                }
-            }
-            
-            # Si un parrain est spécifié et que l'utilisateur n'a pas déjà un parrain
-            if referrer_id and referrer_id != user_id and (not existing_user.get("referred_by")):
-                update_data["$set"]["referred_by"] = str(referrer_id)
-                
-                # Créer la relation de parrainage
-                await create_referral_relationship(user_id, referrer_id)
-            
-            db.users.update_one({"user_id": str(user_id)}, update_data)
-            logger.info(f"Utilisateur mis à jour: {username} (ID: {user_id})")
-        else:
-            # Si l'utilisateur n'existe pas, ajout
-            new_user = {
-                "user_id": str(user_id),
-                "username": username or "Inconnu",
-                "registration_date": current_time,
-                "last_activity": current_time,
-                "referred_by": str(referrer_id) if referrer_id and referrer_id != user_id else None
-            }
-            
-            db.users.insert_one(new_user)
-            logger.info(f"Nouvel utilisateur enregistré: {username} (ID: {user_id})")
-            
-            # Si un parrain est spécifié, créer la relation de parrainage
-            if referrer_id and referrer_id != user_id:
-                await create_referral_relationship(user_id, referrer_id)
-        
-        return True
-    except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement de l'utilisateur: {e}")
-        return False
-
-async def create_referral_relationship(user_id, referrer_id):
-    """
-    Crée une relation de parrainage dans la base de données.
-    
-    Args:
-        user_id (int): ID Telegram de l'utilisateur parrainé
-        referrer_id (int): ID Telegram du parrain
-    """
-    try:
-        # Vérifier si un des utilisateurs est admin
-        if is_admin(user_id) or is_admin(referrer_id):
-            logger.info(f"Relation de parrainage impliquant un admin. ID Utilisateur: {user_id}, ID Parrain: {referrer_id}")
-            # Les admins n'ont pas besoin de relations de parrainage
-            return
-            
-        # Utiliser MongoDB via l'adaptateur
-        db = get_database()
-        if db is None:
-            logger.error("Impossible de se connecter à la base de données pour créer un parrainage")
-            return
-        
-        # Vérifier si la relation existe déjà
-        existing_referral = db.referrals.find_one({
-            "referrer_id": str(referrer_id),
-            "referred_id": str(user_id)
-        })
-        
-        if existing_referral is None:
-            # Vérifier s'il n'y a pas de boucle de parrainage (A parraine B qui parraine A)
-            reverse_relation = db.referrals.find_one({
-                "referrer_id": str(user_id),
-                "referred_id": str(referrer_id)
-            })
-            
-            if reverse_relation is not None:
-                logger.warning(f"Boucle de parrainage détectée: {user_id} et {referrer_id} se parrainent mutuellement")
-                return
-            
-            # Vérifier si l'utilisateur est déjà parrainé par quelqu'un d'autre
-            other_referrer = db.referrals.find_one({
-                "referred_id": str(user_id)
-            })
-            
-            if other_referrer is not None and other_referrer["referrer_id"] != str(referrer_id):
-                logger.warning(f"L'utilisateur {user_id} est déjà parrainé par {other_referrer['referrer_id']}")
-                return
-            
-            # Créer la relation de parrainage
-            current_time = datetime.now().isoformat()
-            new_referral = {
-                "referrer_id": str(referrer_id),
-                "referred_id": str(user_id),
-                "date": current_time,
-                "verified": False,
-                "verification_date": None
-            }
-            
-            db.referrals.insert_one(new_referral)
-            logger.info(f"Relation de parrainage créée: Parrain {referrer_id} -> Filleul {user_id}")
-            
-            # Lancer la vérification d'abonnement en arrière-plan
-            asyncio.create_task(verify_and_update_referral(user_id, referrer_id))
-        else:
-            logger.info(f"Relation de parrainage déjà existante: {referrer_id} -> {user_id}")
-    
-    except Exception as e:
-        logger.error(f"Erreur lors de la création de la relation de parrainage: {e}")
-
-async def verify_and_update_referral(user_id, referrer_id):
-    """
-    Vérifie si l'utilisateur est abonné au canal et met à jour le statut de parrainage.
-    
-    Args:
-        user_id (int): ID Telegram de l'utilisateur
-        referrer_id (int): ID Telegram du parrain
-    """
-    try:
-        # Attendre 10 secondes avant de vérifier (réduit de 30 à 10 pour améliorer la réactivité)
-        await asyncio.sleep(10)
-        
-        # Vérifier l'abonnement
-        is_subscribed = await check_user_subscription(user_id)
-        logger.info(f"Vérification d'abonnement pour user {user_id}: {is_subscribed}")
-        
-        if is_subscribed:
-            db = get_database()
-            if db is None:
-                logger.error("Impossible de se connecter à la base de données pour vérifier un parrainage")
-                return
-            
-            # Mettre à jour le statut de vérification
-            current_time = datetime.now().isoformat()
-            result = db.referrals.update_one(
-                {
-                    "referrer_id": str(referrer_id),
-                    "referred_id": str(user_id)
-                },
-                {
-                    "$set": {
-                        "verified": True,
-                        "verification_date": current_time
-                    }
-                }
-            )
-            
-            if result.modified_count > 0:
-                logger.info(f"Parrainage vérifié: {referrer_id} -> {user_id}")
-                
-                # Notification au parrain
+            # Exécuter les requêtes de ce lot
+            for func, args, kwargs, future in batch:
                 try:
-                    from telegram import Bot
-                    
-                    bot = Bot(token=TELEGRAM_TOKEN)
-                    referral_count = await count_referrals(referrer_id)
-                    
-                    await bot.send_message(
-                        chat_id=referrer_id,
-                        text=f"🎉 *Félicitations!* Un nouvel utilisateur a utilisé votre lien et s'est abonné au canal.\n\n"
-                             f"Vous avez maintenant *{referral_count}/{await get_max_referrals()}* parrainages vérifiés.",
+                    result = await func(*args, **kwargs)
+                    future.set_result(result)
+                except Exception as e:
+                    future.set_exception(e)
+            
+            # Attendre 1 seconde avant le prochain lot
+            if _api_queue:
+                await asyncio.sleep(1)
+    
+    finally:
+        _api_processing = False
+        
+        # S'il reste des requêtes, redémarrer le traitement
+        if _api_queue:
+            asyncio.create_task(process_api_queue())
+
+async def queue_api_request(func, *args, **kwargs):
+    """
+    Ajoute une requête API à la file d'attente et retourne un future pour le résultat.
+    
+    Args:
+        func: Fonction de l'API Telegram à appeler
+        *args, **kwargs: Arguments pour la fonction
+        
+    Returns:
+        Future: Future qui sera complété avec le résultat de la requête
+    """
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+    
+    # Ajouter à la file d'attente
+    _api_queue.append((func, args, kwargs, future))
+    
+    # Démarrer le traitement s'il n'est pas déjà en cours
+    if not _api_processing:
+        asyncio.create_task(process_api_queue())
+    
+    # Calculer la position et le délai estimé
+    position = len(_api_queue)
+    estimated_seconds = (position / _MAX_API_REQUESTS_PER_SECOND) + 1
+    
+    # Si la requête est loin dans la file, informer l'utilisateur
+    if position > _MAX_API_REQUESTS_PER_SECOND:
+        # Chercher l'argument message ou update s'il existe
+        message = None
+        for arg in args:
+            if hasattr(arg, 'message'):
+                message = arg.message
+                break
+                elif hasattr(arg, 'effective_message'):
+                message = arg.effective_message
+                break
+        
+        # Si on a trouvé un message et que le délai est significatif (plus de 2 secondes)
+        if message and estimated_seconds > 2:
+            try:
+                asyncio.create_task(
+                    message.reply_text(
+                        f"⏳ *File d'attente active*\n\n"
+                        f"Votre requête est en position *{position}*.\n"
+                        f"Temps d'attente estimé: *{estimated_seconds:.1f} secondes*\n\n"
+                        f"Merci de votre patience! Nous traitons un maximum de {_MAX_API_REQUESTS_PER_SECOND} requêtes par seconde.",
                         parse_mode='Markdown'
                     )
-                except Exception as e:
-                    logger.error(f"Erreur lors de l'envoi de la notification au parrain: {e}")
-            else:
-                logger.warning(f"Aucune mise à jour du statut de parrainage pour {referrer_id} -> {user_id}")
-        else:
-            logger.info(f"Utilisateur {user_id} non abonné, parrainage non vérifié")
+                )
+            except Exception as e:
+                logger.error(f"Erreur lors de l'envoi du message d'attente: {e}")
     
-    except Exception as e:
-        logger.error(f"Erreur lors de la vérification du parrainage: {e}")
+    return await future
 
-async def has_completed_referrals(user_id, username=None):
+# Vérification d'abonnement simplifiée
+async def verify_subscription(message, user_id, username, context=None, edit=False) -> bool:
     """
-    Vérifie si l'utilisateur a atteint le nombre requis de parrainages.
+    Vérifie si l'utilisateur est abonné au canal.
+    Version optimisée avec moins d'animations et utilisation du cache.
     
     Args:
-        user_id (int): ID Telegram de l'utilisateur
-        username (str, optional): Nom d'utilisateur Telegram pour vérification admin
+        message: Message Telegram (pour répondre)
+        user_id (int): ID de l'utilisateur
+        username (str): Nom d'utilisateur
+        context: Contexte de conversation Telegram (optionnel)
+        edit (bool): Si True, édite le message au lieu d'en envoyer un nouveau
+        
+    Returns:
+        bool: True si l'utilisateur est abonné ou admin, False sinon
+    """
+    # Vérifier si c'est un admin
+    if is_admin(user_id, username):
+        if edit and hasattr(message, 'edit_text'):
+            await message.edit_text(
+                "🔑 *Accès administrateur*\n\n"
+                "Toutes les fonctionnalités sont débloquées en mode administrateur.",
+                parse_mode='Markdown'
+            )
+        else:
+            await message.reply_text(
+                "🔑 *Accès administrateur*\n\n"
+                "Toutes les fonctionnalités sont débloquées en mode administrateur.",
+                parse_mode='Markdown'
+            )
+        return True
+    
+    # Message initial avec animation simplifiée (une seule étape)
+    verify_text = "🔍 *Vérification de votre abonnement en cours...*"
+    
+    if edit and hasattr(message, 'edit_text'):
+        msg = await message.edit_text(verify_text, parse_mode='Markdown')
+    else:
+        msg = await message.reply_text(verify_text, parse_mode='Markdown')
+    
+    # Effectuer la vérification avec le cache
+    is_subscribed = await check_user_subscription(user_id)
+    
+    if is_subscribed:
+        # Message de succès sans animation
+        await msg.edit_text(
+            "✅ *Abonnement vérifié!*\n\n"
+            "Vous êtes bien abonné à [AL VE CAPITAL](https://t.me/alvecapitalofficiel).",
+            parse_mode='Markdown',
+            disable_web_page_preview=True
+        )
+        
+        # Lancer la vérification du parrainage si le contexte est fourni
+        if context:
+            await verify_referral(message, user_id, username, context)
+            
+        return True
+    else:
+        # Message d'erreur sans animation
+        keyboard = [
+            [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
+            [InlineKeyboardButton("🔍 Vérifier à nouveau", callback_data="verify_subscription")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await msg.edit_text(
+            "❌ *Abonnement non détecté*\n\n"
+            "Vous n'êtes pas encore abonné à [AL VE CAPITAL](https://t.me/alvecapitalofficiel).\n\n"
+            "*Instructions:*\n"
+            "1️⃣ Cliquez sur le bouton 'Rejoindre le canal'\n"
+            "2️⃣ Abonnez-vous au canal\n"
+            "3️⃣ Revenez ici et cliquez sur 'Vérifier à nouveau'",
+            reply_markup=reply_markup,
+            parse_mode='Markdown',
+            disable_web_page_preview=True
+        )
+        return False
+
+# Vérification de parrainage simplifiée
+async def verify_referral(message, user_id, username, context=None, edit=False) -> bool:
+    """
+    Vérifie si l'utilisateur a complété ses parrainages.
+    Version optimisée avec moins d'animations et utilisation du cache.
+    
+    Args:
+        message: Message Telegram (pour répondre)
+        user_id (int): ID de l'utilisateur
+        username (str): Nom d'utilisateur
+        context: Contexte de conversation Telegram (optionnel)
+        edit (bool): Si True, édite le message au lieu d'en envoyer un nouveau
         
     Returns:
         bool: True si l'utilisateur a complété ses parrainages ou est admin, False sinon
     """
-    try:
-        # Vérifier si c'est un admin
-        if is_admin(user_id, username):
-            logger.info(f"Vérification de parrainage contournée pour l'admin {username} (ID: {user_id})")
-            return True
+    # Récupérer MAX_REFERRALS
+    MAX_REFERRALS = await get_max_referrals()
+    
+    # Vérifier si c'est un admin
+    if is_admin(user_id, username):
+        if edit and hasattr(message, 'edit_text'):
+            await message.edit_text(
+                "🔑 *Accès administrateur*\n\n"
+                "Toutes les fonctionnalités sont débloquées en mode administrateur.",
+                parse_mode='Markdown'
+            )
+        else:
+            await message.reply_text(
+                "🔑 *Accès administrateur*\n\n"
+                "Toutes les fonctionnalités sont débloquées en mode administrateur.",
+                parse_mode='Markdown'
+            )
+            
+        # Créer un bouton direct pour chaque jeu
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
+        # Message avec boutons directs pour les administrateurs
+        try:
+            await message.reply_text(
+                "🎮 *Menu des jeux disponibles*\n\n"
+                "Sélectionnez un jeu pour commencer:",
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            logger.error(f"Erreur lors de l'affichage des boutons de jeu: {e}")
+            
+        return True
+    
+    # Message initial simplifié
+    verify_text = "🔍 *Vérification de votre parrainage...*"
+    
+    if edit and hasattr(message, 'edit_text'):
+        msg = await message.edit_text(verify_text, parse_mode='Markdown')
+    else:
+        msg = await message.reply_text(verify_text, parse_mode='Markdown')
+    
+    # Effectuer la vérification (utilise déjà le cache via has_completed_referrals)
+    has_completed = await has_completed_referrals(user_id, username)
+    
+    if has_completed:
+        # Message de succès sans animation
+        await msg.edit_text(
+            "✅ *Parrainage complété!*\n\n"
+            f"Vous avez atteint votre objectif de {MAX_REFERRALS} parrainage(s).\n"
+            "Toutes les fonctionnalités sont désormais débloquées.",
+            parse_mode='Markdown'
+        )
+        
+        # Créer un bouton direct pour chaque jeu
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Message avec boutons directs
+        try:
+            await message.reply_text(
+                "🎮 *Menu des jeux disponibles*\n\n"
+                "Sélectionnez un jeu pour commencer:",
+                parse_mode='Markdown',
+                reply_markup=reply_markup
+            )
+        except Exception as e:
+            logger.error(f"Erreur lors de l'affichage des boutons de jeu: {e}")
+        
+        return True
+    else:
+        # Obtenir le nombre actuel de parrainages
         referral_count = await count_referrals(user_id)
-        max_referrals = await get_max_referrals()
         
-        completed = referral_count >= max_referrals
-        logger.info(f"Utilisateur {user_id} a {referral_count}/{max_referrals} parrainages - Statut: {'Complété' if completed else 'En cours'}")
+        # Message indiquant le nombre actuel de parrainages
+        keyboard = [
+            [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+            [InlineKeyboardButton("✅ Vérifier à nouveau", callback_data="verify_referral")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        return completed
-    except Exception as e:
-        logger.error(f"Erreur lors de la vérification des parrainages: {e}")
+        await msg.edit_text(
+            f"⏳ *Parrainage en cours - {referral_count}/{MAX_REFERRALS}*\n\n"
+            f"Vous avez actuellement {referral_count} parrainage(s) sur {MAX_REFERRALS} requis.\n\n"
+            f"Partagez votre lien de parrainage pour débloquer toutes les fonctionnalités.",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
         return False
 
-async def get_referred_users(user_id):
+# Message standard quand l'abonnement est requis
+async def send_subscription_required(message) -> None:
+    """Envoie un message indiquant que l'abonnement est nécessaire."""
+    keyboard = [
+        [InlineKeyboardButton("📣 Rejoindre le canal", url="https://t.me/alvecapitalofficiel")],
+        [InlineKeyboardButton("🔍 Vérifier mon abonnement", callback_data="verify_subscription")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await message.reply_text(
+        "⚠️ *Abonnement requis*\n\n"
+        "Pour utiliser cette fonctionnalité, vous devez être abonné à notre canal.\n\n"
+        "*Instructions:*\n"
+        "1️⃣ Rejoignez [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n"
+        "2️⃣ Cliquez sur '🔍 Vérifier mon abonnement'",
+        reply_markup=reply_markup,
+        parse_mode='Markdown',
+        disable_web_page_preview=True
+    )
+
+# Message standard quand le parrainage est requis
+async def send_referral_required(message) -> None:
+    """Envoie un message indiquant que le parrainage est nécessaire."""
+    MAX_REFERRALS = await get_max_referrals()
+    
+    keyboard = [
+        [InlineKeyboardButton("🔗 Obtenir mon lien de parrainage", callback_data="get_referral_link")],
+        [InlineKeyboardButton("✅ Vérifier mon parrainage", callback_data="verify_referral")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await message.reply_text(
+        "⚠️ *Parrainage requis*\n\n"
+        f"Pour utiliser cette fonctionnalité, vous devez parrainer {MAX_REFERRALS} personne(s).\n\n"
+        "Partagez votre lien de parrainage avec vos amis pour débloquer toutes les fonctionnalités.",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
+# Vérification complète avant d'accéder à une fonctionnalité
+async def verify_all_requirements(user_id, username, message, context=None) -> bool:
     """
-    Récupère la liste des utilisateurs parrainés par un utilisateur.
+    Vérifie toutes les conditions d'accès (abonnement + parrainage).
+    Version optimisée utilisant le cache.
     
     Args:
         user_id (int): ID Telegram de l'utilisateur
+        username (str): Nom d'utilisateur Telegram
+        message: Message Telegram pour répondre
+        context: Contexte de conversation Telegram (optionnel)
         
     Returns:
-        list: Liste des utilisateurs parrainés avec leurs informations
+        bool: True si l'utilisateur a accès (admin ou abonné+parrainé), False sinon
+    """
+    # Vérifier d'abord si c'est un admin
+    if is_admin(user_id, username):
+        logger.info(f"Vérification contournée pour l'administrateur {username} (ID: {user_id})")
+        return True
+    
+    # Vérifier l'abonnement (avec cache)
+    is_subscribed = await check_user_subscription(user_id)
+    if not is_subscribed:
+        await send_subscription_required(message)
+        return False
+    
+    # Vérifier le parrainage (avec cache)
+    has_completed = await has_completed_referrals(user_id, username)
+    if not has_completed:
+        await send_referral_required(message)
+        return False
+    
+    return True
+
+# Fonction pour afficher le menu principal des jeux
+async def show_games_menu(message, context) -> None:
+    """
+    Affiche le menu principal avec tous les jeux disponibles.
+    Version simplifiée et robuste pour éviter les erreurs.
     """
     try:
-        # Vérifier si c'est un admin
-        if is_admin(user_id):
-            logger.info(f"Récupération des parrainages contournée pour l'admin (ID: {user_id})")
-            return []
+        # Texte du menu simplifié
+        menu_text = (
+            "🎮 *FIFA GAMES - Menu Principal* 🎮\n\n"
+            "Choisissez un jeu pour obtenir des prédictions :\n\n"
+            "🏆 *FIFA 4x4 Predictor*\n"
+            "_Prédictions précises basées sur des statistiques réelles_\n\n"
+            "🍎 *Apple of Fortune*\n"
+            "_Trouvez la bonne pomme grâce à notre système prédictif_\n\n"
+            "🃏 *Baccarat*\n"
+            "_Anticipez le gagnant avec notre technologie d'analyse_"
+        )
         
-        # Utiliser MongoDB via l'adaptateur
-        db = get_database()
-        if db is None:
-            logger.error("Impossible de se connecter à la base de données pour récupérer les parrainages")
-            return []
+        # Boutons pour accéder aux différents jeux
+        keyboard = [
+            [InlineKeyboardButton("🏆 FIFA 4x4 Predictor", callback_data="game_fifa")],
+            [InlineKeyboardButton("🍎 Apple of Fortune", callback_data="game_apple")],
+            [InlineKeyboardButton("🃏 Baccarat", callback_data="game_baccarat")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Récupérer les parrainages
-        referrals = list(db.referrals.find({"referrer_id": str(user_id)}))
-        
-        referred_users = []
-        for referral in referrals:
-            referred_id = referral.get("referred_id")
-            if referred_id:
-                # Récupérer l'information de l'utilisateur parrainé
-                user_info = db.users.find_one({"user_id": referred_id})
-                
-                username = "Inconnu"
-                if user_info is not None and "username" in user_info:
-                    username = user_info["username"]
-                
-                referred_users.append({
-                    'id': referred_id,
-                    'username': username,
-                    'is_verified': referral.get("verified", False)
-                })
-        
-        return referred_users
-    
+        # Message avec le menu
+        if hasattr(message, 'edit_text'):
+            await message.edit_text(menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            await message.reply_text(menu_text, reply_markup=reply_markup, parse_mode='Markdown')
+            
     except Exception as e:
-        logger.error(f"Erreur lors de la récupération des utilisateurs parrainés: {e}")
-        return []
-
-async def generate_referral_link(user_id, bot_username):
-    """
-    Génère un lien de parrainage pour un utilisateur.
-    
-    Args:
-        user_id (int): ID Telegram de l'utilisateur
-        bot_username (str): Nom d'utilisateur du bot
+        # Log complet de l'erreur
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"Erreur détaillée dans show_games_menu: {error_trace}")
         
-    Returns:
-        str: Lien de parrainage
-    """
-    return f"https://t.me/{bot_username}?start=ref{user_id}"
-
-# Fonction pour obtenir les instructions de parrainage
-def get_referral_instructions():
-    """
-    Retourne les instructions pour qu'un parrainage soit validé.
-    
-    Returns:
-        str: Message formaté avec les instructions
-    """
-    return (
-        "*📋 Conditions pour qu'un parrainage soit validé:*\n\n"
-        "1️⃣ *L'invité doit cliquer sur votre lien de parrainage*\n"
-        "2️⃣ *L'invité doit démarrer le bot* avec la commande /start\n"
-        "3️⃣ *L'invité doit s'abonner* au canal [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n\n"
-        "_Note: Le parrainage sera automatiquement vérifié et validé une fois ces conditions remplies_"
-    )
+        # Message d'erreur avec plus de détails
+        error_message = f"Une erreur s'est produite lors du chargement du menu: {str(e)}"
+        logger.error(error_message)
+        
+        try:
+            await message.reply_text(
+                "Désolé, une erreur s'est produite lors du chargement du menu des jeux. Veuillez réessayer."
+            )
+        except Exception:
+            logger.error("Impossible d'envoyer le message d'erreur")

@@ -2,7 +2,8 @@ import logging
 import os
 import time
 from typing import Dict, List, Any, Optional, Tuple
-from config import USE_MONGODB, CACHE_EXPIRE_SECONDS, DEBUG
+from datetime import datetime
+from config import USE_MONGODB, CACHE_EXPIRE_SECONDS
 
 # Configuration du logging
 logging.basicConfig(
@@ -78,6 +79,17 @@ _match_cache = None  # Cache pour les données de match (rarement modifiées)
 _subscription_cache = {}  # Clé: user_id, Valeur: statut d'abonnement
 _last_cache_cleanup = 0
 
+# File d'attente pour les utilisateurs à traiter par lots
+_users_batch_queue = []  # Liste des utilisateurs en attente d'enregistrement
+_last_batch_processing = time.time()  # Heure du dernier traitement par lots
+
+# Cache duration en secondes (valeur par défaut: 30 minutes)
+try:
+    from config import CACHE_DURATION
+    _cache_duration = CACHE_DURATION
+except ImportError:
+    _cache_duration = 1800  # 30 minutes par défaut
+
 def _clear_expired_cache():
     """Nettoie les entrées de cache expirées"""
     global _last_cache_cleanup
@@ -95,15 +107,15 @@ def _clear_expired_cache():
     expired_subscriptions = []
     
     for user_id, (timestamp, _) in _user_cache.items():
-        if current_time - timestamp > CACHE_EXPIRE_SECONDS:
+        if current_time - timestamp > _cache_duration:
             expired_users.append(user_id)
             
     for user_id, (timestamp, _) in _referral_cache.items():
-        if current_time - timestamp > CACHE_EXPIRE_SECONDS:
+        if current_time - timestamp > _cache_duration:
             expired_referrals.append(user_id)
     
     for user_id, (timestamp, _) in _subscription_cache.items():
-        if current_time - timestamp > CACHE_EXPIRE_SECONDS:
+        if current_time - timestamp > _cache_duration:
             expired_subscriptions.append(user_id)
         
     # Supprimer les entrées expirées
@@ -116,8 +128,7 @@ def _clear_expired_cache():
     for user_id in expired_subscriptions:
         del _subscription_cache[user_id]
         
-    if DEBUG and (expired_users or expired_referrals or expired_subscriptions):
-        logger.debug(f"Cache nettoyé: {len(expired_users)} utilisateurs, {len(expired_referrals)} parrainages, {len(expired_subscriptions)} abonnements supprimés")
+    logger.debug(f"Cache nettoyé: {len(expired_users)} utilisateurs, {len(expired_referrals)} parrainages, {len(expired_subscriptions)} abonnements supprimés")
 
 # Fonction pour obtenir une connexion à la base de données
 def get_database():
@@ -133,6 +144,98 @@ def get_database():
         # Pour Google Sheets, retourner None car ce n'est pas une base de données traditionnelle
         return None
 
+# Traitement par lots des utilisateurs
+async def process_users_batch():
+    """Traite le lot d'utilisateurs en attente"""
+    global _users_batch_queue
+    global _last_batch_processing
+    
+    # Copier et vider la file d'attente (pour éviter les problèmes de concurrence)
+    users_to_process = _users_batch_queue.copy()
+    _users_batch_queue = []
+    _last_batch_processing = time.time()
+    
+    if not users_to_process:
+        logger.debug("Aucun utilisateur à traiter par lots")
+        return
+    
+    logger.info(f"Traitement par lots de {len(users_to_process)} utilisateurs")
+    
+    try:
+        if USE_MONGODB:
+            # Pour MongoDB, préparer les opérations par lots
+            db_instance = get_database()
+            if db_instance is None:
+                logger.error("Impossible de se connecter à MongoDB pour le traitement par lots")
+                return
+            
+            # Pour chaque utilisateur
+            for user_data in users_to_process:
+                # Enregistrer l'utilisateur
+                await db.register_user(
+                    user_data["user_id"], 
+                    user_data["username"], 
+                    user_data.get("referrer_id")
+                )
+        else:
+            # Pour Google Sheets, traiter séquentiellement
+            for user_data in users_to_process:
+                await db.register_user(
+                    user_data["user_id"], 
+                    user_data["username"], 
+                    user_data.get("referrer_id")
+                )
+                
+        logger.info(f"Traitement par lots terminé pour {len(users_to_process)} utilisateurs")
+    except Exception as e:
+        logger.error(f"Erreur lors du traitement par lots des utilisateurs: {e}")
+
+async def add_user_to_batch_queue(user_id, username, referrer_id=None):
+    """
+    Ajoute un utilisateur à la file d'attente pour traitement par lots.
+    Déclenche le traitement si nécessaire.
+    
+    Args:
+        user_id (int): ID Telegram de l'utilisateur
+        username (str): Nom d'utilisateur Telegram
+        referrer_id (int, optional): ID du parrain
+        
+    Returns:
+        bool: True si l'ajout a réussi
+    """
+    global _users_batch_queue
+    global _last_batch_processing
+    
+    try:
+        # Vérifier si l'utilisateur est déjà dans la file d'attente
+        for user in _users_batch_queue:
+            if user["user_id"] == user_id:
+                return True
+        
+        # Ajouter l'utilisateur à la file d'attente
+        _users_batch_queue.append({
+            "user_id": user_id,
+            "username": username,
+            "timestamp": time.time(),
+            "referrer_id": referrer_id
+        })
+        
+        # Si la file atteint 10 utilisateurs ou si 30 secondes se sont écoulées,
+        # déclencher le traitement par lots
+        batch_size_threshold = 10
+        batch_time_threshold = 30  # secondes
+        
+        if (len(_users_batch_queue) >= batch_size_threshold or 
+                (time.time() - _last_batch_processing) > batch_time_threshold):
+            # Traiter le lot en arrière-plan
+            import asyncio
+            asyncio.create_task(process_users_batch())
+        
+        return True
+    except Exception as e:
+        logger.error(f"Erreur lors de l'ajout de l'utilisateur à la file d'attente: {e}")
+        return False
+
 # Fonctions d'accès aux données des matchs (avec cache)
 def get_all_matches_data():
     """
@@ -144,7 +247,7 @@ def get_all_matches_data():
     # Si le cache est valide, l'utiliser
     if _match_cache is not None:
         timestamp, matches = _match_cache
-        if time.time() - timestamp < CACHE_EXPIRE_SECONDS:
+        if time.time() - timestamp < _cache_duration:
             return matches
     
     # Sinon, charger depuis la base de données
@@ -168,7 +271,7 @@ def get_all_teams():
     # Si le cache est valide, l'utiliser
     if _team_cache is not None:
         timestamp, teams = _team_cache
-        if time.time() - timestamp < CACHE_EXPIRE_SECONDS:
+        if time.time() - timestamp < _cache_duration:
             return teams
     
     # Sinon, charger depuis la base de données
@@ -248,7 +351,8 @@ async def check_user_subscription(user_id):
     # Vérifier le cache
     if user_id_str in _subscription_cache:
         timestamp, is_subscribed = _subscription_cache[user_id_str]
-        if time.time() - timestamp < CACHE_EXPIRE_SECONDS:
+        if time.time() - timestamp < _cache_duration:
+            logger.info(f"Utilisation du cache pour la vérification d'abonnement de l'utilisateur {user_id}")
             return is_subscribed
     
     # Vérification via la base de données active
@@ -294,13 +398,9 @@ async def register_user(user_id, username, referrer_id=None):
     except Exception as e:
         logger.error(f"Erreur lors de la vérification du statut admin: {e}")
     
-    # Enregistrer via la base de données active
-    try:
-        return await db.register_user(user_id, username, referrer_id)
-    except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement de l'utilisateur: {e}")
-        # En cas d'erreur, supposer que l'enregistrement a réussi pour éviter le blocage
-        return True
+    # Ajouter l'utilisateur à la file d'attente pour traitement par lots
+    success = await add_user_to_batch_queue(user_id, username, referrer_id)
+    return success
 
 async def create_referral_relationship(user_id, referrer_id):
     """
@@ -349,6 +449,8 @@ async def verify_and_update_referral(user_id, referrer_id):
     
     # Vérifier et mettre à jour via la base de données active
     try:
+        # Attendre moins longtemps (2 secondes au lieu de 30)
+        await asyncio.sleep(2)
         return await db.verify_and_update_referral(user_id, referrer_id)
     except Exception as e:
         logger.error(f"Erreur lors de la vérification et mise à jour du parrainage: {e}")
@@ -411,7 +513,8 @@ async def count_referrals(user_id):
     # Vérifier le cache
     if user_id_str in _referral_cache:
         timestamp, count = _referral_cache[user_id_str]
-        if time.time() - timestamp < CACHE_EXPIRE_SECONDS:
+        if time.time() - timestamp < _cache_duration:
+            logger.info(f"Utilisation du cache pour le comptage des parrainages de l'utilisateur {user_id}")
             return count
     
     # Si pas dans le cache ou expiré, récupérer depuis la base de données
@@ -505,7 +608,7 @@ def get_referral_instructions():
         return (
             "*📋 Conditions pour qu'un parrainage soit validé:*\n\n"
             "1️⃣ *L'invité doit cliquer sur votre lien de parrainage*\n"
-            "2️⃣ *L'invité doit démarrer le bot*\n"
+            "2️⃣ *L'invité doit démarrer le bot* avec la commande /start\n"
             "3️⃣ *L'invité doit s'abonner* au canal [AL VE CAPITAL](https://t.me/alvecapitalofficiel)\n\n"
             "_Note: Le parrainage sera automatiquement vérifié et validé une fois ces conditions remplies_"
         )

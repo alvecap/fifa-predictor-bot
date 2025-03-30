@@ -6,9 +6,12 @@ import re
 import time
 from datetime import datetime, timedelta
 from config import MAX_PREDICTIONS_HALF_TIME, MAX_PREDICTIONS_FULL_TIME
-from database_adapter import (
-    get_all_matches_data, get_team_statistics, 
-    get_match_id_trends, get_common_scores, get_direct_confrontations
+
+# Importer notre nouveau système de cache
+from cache_system import (
+    get_cached_prediction, cache_prediction,
+    get_cached_teams, cache_teams,
+    get_cached_matches, cache_matches
 )
 
 # Configuration du logging
@@ -18,92 +21,71 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class PredictionCache:
-    def __init__(self, cache_duration=1800):  # Par défaut: cache de 30 minutes
-        self.cache = {}
-        self.cache_duration = cache_duration
-        self.last_cleanup = time.time()
-    
-    def get_prediction(self, team1, team2, odds1=None, odds2=None):
-        """Récupère une prédiction du cache si elle existe et n'est pas expirée"""
-        # Nettoyage périodique si nécessaire
-        self._periodic_cleanup()
-        
-        cache_key = self._generate_key(team1, team2, odds1, odds2)
-        
-        if cache_key in self.cache:
-            timestamp, prediction = self.cache[cache_key]
-            if time.time() - timestamp < self.cache_duration:
-                logger.info(f"Cache hit: {team1} vs {team2}")
-                return prediction
-            else:
-                # Nettoyer cette entrée expirée particulière
-                del self.cache[cache_key]
-                logger.info(f"Cache expired: {team1} vs {team2}")
-        
-        logger.info(f"Cache miss: {team1} vs {team2}")
-        return None
-    
-    def store_prediction(self, team1, team2, prediction, odds1=None, odds2=None):
-        """Stocke une prédiction dans le cache"""
-        cache_key = self._generate_key(team1, team2, odds1, odds2)
-        self.cache[cache_key] = (time.time(), prediction)
-        logger.info(f"Cached prediction for: {team1} vs {team2}")
-    
-    def _generate_key(self, team1, team2, odds1, odds2):
-        """Génère une clé unique pour le cache"""
-        # Normaliser les cotes pour éviter des problèmes de précision flottante
-        odds1_str = f"{odds1:.2f}" if odds1 is not None else "None"
-        odds2_str = f"{odds2:.2f}" if odds2 is not None else "None"
-        return f"{team1}_{team2}_{odds1_str}_{odds2_str}"
-    
-    def clear_all(self):
-        """Vide complètement le cache"""
-        self.cache = {}
-        logger.info("Cache cleared completely")
-    
-    def _periodic_cleanup(self):
-        """Nettoie le cache toutes les 5 minutes"""
-        now = time.time()
-        if now - self.last_cleanup > 300:  # 300 secondes = 5 minutes
-            self.clear_expired()
-            self.last_cleanup = now
-    
-    def clear_expired(self):
-        """Supprime les prédictions expirées du cache"""
-        now = time.time()
-        expired_keys = [k for k, (timestamp, _) in self.cache.items() 
-                       if now - timestamp > self.cache_duration]
-        
-        for k in expired_keys:
-            del self.cache[k]
-        
-        if expired_keys:
-            logger.info(f"Cleared {len(expired_keys)} expired predictions from cache")
-
 class MatchPredictor:
+    """
+    Classe optimisée pour la prédiction de matchs FIFA 4x4.
+    Utilise un cache centralisé pour améliorer les performances.
+    """
     def __init__(self):
         """Initialise le prédicteur de match"""
-        # Initialiser le cache avec une durée de 30 minutes
-        self.prediction_cache = PredictionCache(cache_duration=1800)
-        
-        # Charger les données de matchs
-        self.matches = get_all_matches_data()
         self.team_stats = None
         self.match_id_trends = None
         self.teams_mapping = {}  # Dictionnaire pour normaliser les noms d'équipes
         
-        if self.matches:
-            # Pré-calculer les statistiques pour améliorer les performances
-            self.team_stats = get_team_statistics(self.matches)
-            self.match_id_trends = get_match_id_trends(self.matches)
+        # Précharger les données au démarrage
+        self._preload_data()
+    
+    async def _preload_data(self):
+        """Précharge les données statiques en arrière-plan"""
+        try:
+            # Vérifier d'abord si les données sont déjà en cache
+            cached_matches = await get_cached_matches()
             
-            # Créer un dictionnaire de correspondance des noms d'équipes
-            if self.team_stats:
+            if cached_matches:
+                logger.info("Données de matches trouvées en cache")
+                self.matches = cached_matches
+                
+                # Calculer les statistiques à partir des matches en cache
+                self.team_stats = self._calculate_team_statistics(self.matches)
+                self.match_id_trends = self._calculate_match_id_trends(self.matches)
                 self._create_teams_mapping()
-        else:
-            logger.warning("Aucune donnée de match disponible!")
-
+                
+                # Mettre en cache la liste des équipes si ce n'est pas déjà fait
+                teams = list(self.team_stats.keys())
+                cached_teams = await get_cached_teams()
+                if not cached_teams:
+                    await cache_teams(teams)
+                    
+                logger.info(f"Données préchargées depuis le cache: {len(self.matches)} matches, {len(teams)} équipes")
+                return
+            
+            # Si pas en cache, charger depuis la base de données
+            logger.info("Préchargement des données depuis la base de données...")
+            from database_adapter import get_all_matches_data
+            self.matches = get_all_matches_data()
+            
+            if self.matches:
+                # Mettre en cache pour utilisation future
+                await cache_matches(self.matches)
+                
+                # Calculer les statistiques pour améliorer les performances
+                self.team_stats = self._calculate_team_statistics(self.matches)
+                self.match_id_trends = self._calculate_match_id_trends(self.matches)
+                
+                # Créer un dictionnaire de correspondance des noms d'équipes
+                # Créer un dictionnaire de correspondance des noms d'équipes
+                self._create_teams_mapping()
+                
+                # Mettre en cache la liste des équipes
+                teams = list(self.team_stats.keys())
+                await cache_teams(teams)
+                
+                logger.info(f"Données préchargées: {len(self.matches)} matches, {len(teams)} équipes")
+            else:
+                logger.warning("Aucune donnée de match disponible!")
+        except Exception as e:
+            logger.error(f"Erreur lors du préchargement des données: {e}")
+    
     def _create_teams_mapping(self):
         """Crée un dictionnaire de correspondance pour gérer les variations de noms d'équipes"""
         for team_name in self.team_stats.keys():
@@ -164,19 +146,27 @@ class MatchPredictor:
         
         return None
 
-    def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
-        """Prédit le résultat d'un match entre team1 et team2"""
+    async def predict_match(self, team1: str, team2: str, odds1: float = None, odds2: float = None) -> Optional[Dict[str, Any]]:
+        """
+        Prédit le résultat d'un match entre team1 et team2.
+        Version optimisée qui utilise le cache et réduit les opérations inutiles.
+        """
         logger.info(f"Tentative d'analyse du match: {team1} vs {team2}")
         
         # Vérifier si la prédiction est dans le cache
-        cached_prediction = self.prediction_cache.get_prediction(team1, team2, odds1, odds2)
+        cached_prediction = await get_cached_prediction(team1, team2, odds1, odds2)
         if cached_prediction:
+            logger.info(f"Prédiction trouvée en cache pour {team1} vs {team2}")
             return cached_prediction
         
         # Vérifier si les statistiques sont disponibles
         if not self.team_stats:
             logger.error("Statistiques d'équipes non disponibles")
-            return {"error": "Données d'équipes non disponibles. Veuillez réessayer ultérieurement."}
+            await self._preload_data()  # Essayer de recharger les données
+            
+            # Vérifier à nouveau après le rechargement
+            if not self.team_stats:
+                return {"error": "Données d'équipes non disponibles. Veuillez réessayer ultérieurement."}
         
         # Obtenir les noms canoniques des équipes
         canonical_team1 = self._get_canonical_team_name(team1)
@@ -198,6 +188,7 @@ class MatchPredictor:
         team2 = canonical_team2
         
         # Récupérer les confrontations directes
+        from database_adapter import get_direct_confrontations
         direct_matches = get_direct_confrontations(self.matches, team1, team2)
         
         # Initialiser les résultats de prédiction
@@ -249,6 +240,7 @@ class MatchPredictor:
                         logger.warning(f"Erreur lors de l'analyse du score: {e}")
         
         # Analyse des scores les plus fréquents dans les confrontations directes
+        from database_adapter import get_common_scores
         common_direct_final = get_common_scores(direct_final_scores)
         common_direct_half = get_common_scores(direct_first_half)
         
@@ -555,7 +547,7 @@ class MatchPredictor:
         prediction_results["avg_goals_full_time"] = round(prediction_results["avg_goals_full_time"], 1)
         
         # Stocker la prédiction dans le cache
-        self.prediction_cache.store_prediction(team1, team2, prediction_results, odds1, odds2)
+        await cache_prediction(team1, team2, odds1, odds2, prediction_results)
         
         logger.info(f"Prédiction générée avec succès pour {team1} vs {team2}")
         return prediction_results
@@ -620,7 +612,24 @@ class MatchPredictor:
         
         # Normaliser entre 0 et 1
         return form_score / len(recent_matches)
+        
+    def _calculate_team_statistics(self, matches):
+        """
+        Calcule les statistiques pour chaque équipe à partir des matchs.
+        Version optimisée qui précharge les statistiques au lieu de les calculer à chaque prédiction.
+        """
+        from database_adapter import get_team_statistics
+        return get_team_statistics(matches)
+    
+    def _calculate_match_id_trends(self, matches):
+        """
+        Analyse les tendances par numéro de match.
+        Version optimisée qui précharge les tendances au lieu de les calculer à chaque prédiction.
+        """
+        from database_adapter import get_match_id_trends
+        return get_match_id_trends(matches)
 
+# Fonction formatage message prédiction optimisée
 def format_prediction_message(prediction: Dict[str, Any]) -> str:
     """Formate le résultat de prédiction en message lisible et attrayant"""
     if not prediction:
@@ -675,6 +684,7 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
         message.append("  Pas assez de données pour prédire")
     
     # Gagnant du match - version simplifiée
+    # Gagnant du match - version simplifiée
     winner_ft = prediction["winner_full_time"]
     if winner_ft["team"]:
         if winner_ft["team"] == "Nul":
@@ -726,3 +736,12 @@ def format_prediction_message(prediction: Dict[str, Any]) -> str:
     message.append("_Les paris sportifs comportent des risques. Ne misez pas plus de 5% de votre capital._")
     
     return "\n".join(message)
+
+# Créer une instance unique du prédicteur (singleton)
+match_predictor = MatchPredictor()
+
+# Fonction asynchrone pour précharger les données au démarrage
+async def preload_prediction_data():
+    """Précharge les données pour le prédicteur au démarrage de l'application."""
+    await match_predictor._preload_data()
+    logger.info("Préchargement des données de prédiction terminé")

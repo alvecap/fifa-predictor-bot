@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import sys
+import os
 from typing import Optional, Dict, Any, List
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -25,11 +26,6 @@ from config import TELEGRAM_TOKEN, WELCOME_MESSAGE
 
 # Imports pour la vérification admin
 from admin_access import is_admin
-
-# Imports pour les systèmes optimisés
-from cache_system import start_cache_monitoring
-from queue_manager import start_queue_manager, stop_queue_manager
-from predictor import preload_prediction_data
 
 # Imports pour les vérifications
 from verification import (
@@ -60,10 +56,8 @@ _is_system_initialized = False
 
 async def initialize_system():
     """
-    Initialise tous les systèmes optimisés :
-    1. Démarre le gestionnaire de file d'attente
-    2. Précharge les données de prédiction
-    3. Démarre la surveillance du cache
+    Initialise tous les systèmes optimisés.
+    Version simplifiée qui évite les tâches asyncio parallèles.
     """
     global _is_system_initialized
     
@@ -72,48 +66,21 @@ async def initialize_system():
         return
     
     logger.info("Initialisation du système optimisé...")
-    
-    # Démarrer le gestionnaire de file d'attente
-    logger.info("Démarrage du gestionnaire de file d'attente...")
-    await start_queue_manager()
-    
+
     # Précharger les données de prédiction
     logger.info("Préchargement des données de prédiction...")
-    preload_task = asyncio.create_task(preload_prediction_data())
-    
-    # Démarrer la surveillance du cache
-    logger.info("Démarrage de la surveillance du cache...")
-    cache_task = asyncio.create_task(start_cache_monitoring())
-    
-    # Attendre la fin du préchargement des données avec timeout
     try:
-        await asyncio.wait_for(preload_task, timeout=30.0)
-        logger.info("Préchargement des données de prédiction terminé avec succès")
-    except asyncio.TimeoutError:
-        logger.warning("Le préchargement des données de prédiction prend plus de temps que prévu, "
-                      "l'application continuera à fonctionner mais avec des performances réduites initialement")
+        # Précharger les données en mode synchrone
+        from database_adapter import get_all_matches_data, get_all_teams
+        matches = get_all_matches_data()
+        teams = get_all_teams()
+        logger.info(f"Données préchargées: {len(matches)} matchs, {len(teams)} équipes")
+    except Exception as e:
+        logger.error(f"Erreur lors du préchargement: {e}")
     
+    # Marquer comme initialisé
     _is_system_initialized = True
     logger.info("Système optimisé initialisé avec succès")
-
-async def shutdown_system():
-    """
-    Arrête proprement tous les systèmes optimisés.
-    """
-    global _is_system_initialized
-    
-    if not _is_system_initialized:
-        return
-    
-    logger.info("Arrêt du système optimisé...")
-    
-    # Arrêter le gestionnaire de file d'attente
-    await stop_queue_manager()
-    
-    # Les autres tâches s'arrêteront automatiquement à la fermeture de l'application
-    _is_system_initialized = False
-    
-    logger.info("Système optimisé arrêté avec succès")
 
 # Fonction principale pour le jeu FIFA 4x4
 async def start_fifa_game(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -586,124 +553,255 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             disable_web_page_preview=True
         )
 
-# Fonction principale pour démarrer le bot
-async def run_bot():
-    """Démarre le bot Telegram."""
-    try:
-        # Initialiser les systèmes optimisés
-        await initialize_system()
-        
-        # Créer l'application
-        application = Application.builder().token(TELEGRAM_TOKEN).build()
+async def webhook_handler(request):
+    """Gestionnaire de webhook pour Flask/Gunicorn"""
+    from flask import request, jsonify
+    
+    if request.method == "POST":
+        update = Update.de_json(request.get_json(force=True), bot)
+        await application.process_update(update)
+        return jsonify({"status": "ok"})
+    
+    return jsonify({"status": "error", "message": "Méthode non autorisée"})
 
-        # Ajouter les gestionnaires de commandes
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(CommandHandler("games", games_command))
-        application.add_handler(CommandHandler("check", check_command))
-        application.add_handler(CommandHandler("referral", referral_command))
+# Version pour le mode webhook
+def main_webhook():
+    """Version pour le mode webhook avec Flask/Gunicorn"""
+    from flask import Flask, request, jsonify
+    
+    # Initialiser le système de manière synchrone
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(initialize_system())
+    
+    # Créer l'application
+    app = Flask(__name__)
+    
+    # Config pour le webhook
+    bot_token = TELEGRAM_TOKEN
+    webhook_url = os.environ.get('WEBHOOK_URL', 'https://fifa-predictor-bot.onrender.com/webhook')
+    
+    # Créer l'application Telegram
+    global application, bot
+    application = Application.builder().token(bot_token).build()
+    bot = application.bot
+    
+    # Ajouter les gestionnaires de commandes
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("games", games_command))
+    application.add_handler(CommandHandler("check", check_command))
+    application.add_handler(CommandHandler("referral", referral_command))
+    
+    # Gestionnaire de conversation pour les entrées spécifiques aux jeux
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
+        states={
+            ODDS_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
+            BACCARAT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)]
+        },
+        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+    )
+    application.add_handler(conv_handler)
+    
+    # Gestionnaire pour tous les callbacks
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Ajouter le gestionnaire pour les messages normaux non gérés par la conversation
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages))
+    
+    # Ajouter le gestionnaire d'erreurs
+    application.add_error_handler(error_handler)
+    
+    # Configurer et initialiser le webhook
+    try:
+        import requests
+        # Supprimer l'ancien webhook s'il existe
+        requests.get(f"https://api.telegram.org/bot{bot_token}/deleteWebhook?drop_pending_updates=true")
         
-        # Gestionnaire de conversation pour les entrées spécifiques aux jeux
-        conv_handler = ConversationHandler(
-            entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
-            states={
-                ODDS_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
-                BACCARAT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)]
-            },
-            fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+        # Définir le nouveau webhook
+        response = requests.post(
+            f"https://api.telegram.org/bot{bot_token}/setWebhook",
+            json={"url": webhook_url, "allowed_updates": ["message", "callback_query"]}
         )
-        application.add_handler(conv_handler)
         
-        # Gestionnaire pour tous les callbacks
-        application.add_handler(CallbackQueryHandler(button_callback))
-        
-        # Ajouter le gestionnaire pour les messages normaux non gérés par la conversation
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages))
-        
-        # Ajouter le gestionnaire d'erreurs
-        application.add_error_handler(error_handler)
-
-        # Démarrer le bot
-        logger.info(f"Bot démarré avec le token: {TELEGRAM_TOKEN[:5]}...")
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling()
-        
-        # Signaler le succès de démarrage
-        logger.info("Bot FIFA 4x4 Predictor entièrement démarré et prêt à recevoir des commandes.")
-        
-        # Maintenir le bot en exécution
-        while True:
-            await asyncio.sleep(1)
-            
-    except KeyboardInterrupt:
-        logger.info("Arrêt du bot par l'utilisateur...")
+        if response.status_code == 200 and response.json().get("ok"):
+            logger.info(f"Webhook configuré avec succès à {webhook_url}")
+        else:
+            logger.error(f"Erreur lors de la configuration du webhook: {response.text}")
     except Exception as e:
-        logger.critical(f"ERREUR CRITIQUE lors du démarrage du bot: {e}")
-        import traceback
-        logger.critical(traceback.format_exc())
-        # Continuation du code de fifa_games.py
-
-    finally:
-        # Arrêter le bot proprement
-        logger.info("Arrêt du bot...")
-        
-        # Arrêter les systèmes optimisés
-        try:
-            await shutdown_system()
-        except Exception as e:
-            logger.error(f"Erreur lors de l'arrêt du système: {e}")
+        logger.error(f"Erreur lors de la configuration du webhook: {e}")
+    
+    # Route pour le webhook
+    @app.route('/webhook', methods=['POST'])
+    async def webhook():
+        """Endpoint de webhook pour Telegram"""
+        if request.method == "POST":
+            # Convertir en objet Update
+            update_dict = request.get_json(force=True)
+            update = Update.de_json(update_dict, bot)
             
-        # Arrêter l'application
-        try:
-            if 'application' in locals():
-                await application.stop()
-                await application.shutdown()
-        except Exception as e:
-            logger.error(f"Erreur lors de l'arrêt de l'application: {e}")
+            # Créer une tâche pour traiter la mise à jour
+            asyncio.run(application.process_update(update))
+            
+            return jsonify({"status": "ok"})
+        
+        return jsonify({"status": "error", "message": "Méthode non autorisée"})
+    
+    # Route pour vérifier l'état du service
+    @app.route('/health', methods=['GET'])
+    def health_check():
+        """Endpoint de vérification de l'état du service"""
+        return jsonify({
+            "status": "healthy",
+            "version": "1.0.0",
+            "webhook_url": webhook_url,
+            "description": "FIFA 4x4 Predictor Bot"
+        })
+    
+    # Route pour afficher la page d'accueil
+    @app.route('/', methods=['GET'])
+    def index():
+        """Page d'accueil simple"""
+        return """
+        <html>
+            <head>
+                <title>FIFA 4x4 Predictor Bot</title>
+                <style>
+                    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                    h1 { color: #2c3e50; }
+                    .container { border: 1px solid #ddd; padding: 20px; border-radius: 5px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>FIFA 4x4 Predictor Bot</h1>
+                    <p>Ce serveur héberge le bot FIFA 4x4 Predictor pour Telegram.</p>
+                    <p>Pour utiliser le bot, recherchez <strong>@FIFA4x4PredictorBot</strong> sur Telegram.</p>
+                    <p>Le bot est en ligne et fonctionne correctement.</p>
+                </div>
+            </body>
+        </html>
+        """
+    
+    # Préparer l'application Flask à être servie par Gunicorn
+    return app
 
-# Fonction principale
-def main() -> None:
-    """Démarre le bot."""
+# Version pour le mode polling
+def main_polling():
+    """Version pour le mode polling (local ou déboggage)"""
+    # Initialiser le système de manière synchrone
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(initialize_system())
+    
+    # Créer l'application
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    
+    # Ajouter les gestionnaires de commandes
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("games", games_command))
+    application.add_handler(CommandHandler("check", check_command))
+    application.add_handler(CommandHandler("referral", referral_command))
+    
+    # Gestionnaire de conversation pour les entrées spécifiques aux jeux
+    conv_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
+        states={
+            ODDS_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)],
+            BACCARAT_INPUT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages)]
+        },
+        fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+    )
+    application.add_handler(conv_handler)
+    
+    # Gestionnaire pour tous les callbacks
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Ajouter le gestionnaire pour les messages normaux non gérés par la conversation
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_game_messages))
+    
+    # Ajouter le gestionnaire d'erreurs
+    application.add_error_handler(error_handler)
+    
+    # S'assurer qu'il n'y a pas de webhook actif
     try:
-        # Configurer asyncio pour mieux gérer les erreurs
-        import asyncio
-        
-        # Pour Python 3.10 et plus, on peut ajouter un meilleur débogage
-        try:
-            asyncio.get_event_loop().set_debug(True)
-        except:
-            pass
-        
-        # Réinitialiser les webhooks Telegram avant le démarrage
-        try:
-            import requests
-            from config import TELEGRAM_TOKEN
-            
-            # URL pour supprimer le webhook et les mises à jour en attente
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
-            
-            # Faire la requête
-            response = requests.get(url)
-            if response.status_code == 200:
-                logger.info("✅ Réinitialisation des webhooks Telegram réussie!")
-            else:
-                logger.warning(f"⚠️ Erreur lors de la réinitialisation des webhooks: {response.text}")
-        except Exception as e:
-            logger.warning(f"⚠️ Erreur lors de la réinitialisation des webhooks: {e}")
-        
-        # Lancer le bot dans une boucle asyncio
-        asyncio.run(run_bot())
-        
-    except KeyboardInterrupt:
-        logger.info("Bot arrêté par l'utilisateur.")
+        import requests
+        requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true")
+        logger.info("Webhook supprimé avec succès")
     except Exception as e:
-        logger.critical(f"ERREUR CRITIQUE lors du démarrage du bot: {e}")
-        import traceback
-        logger.critical(traceback.format_exc())
-        # Assurer un code de sortie non-zéro en cas d'erreur
-        import sys
-        sys.exit(1)
+        logger.warning(f"Erreur lors de la suppression du webhook: {e}")
+    
+    # Démarrer le bot en mode polling
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
+# Point d'entrée principal
 if __name__ == '__main__':
-    main()
+    print("Démarrage du bot FIFA 4x4 Predictor...")
+    print("Détection du mode de fonctionnement...")
+    
+    # Déterminer le mode (webhook ou polling) en fonction de l'environnement
+    is_production = os.environ.get('ENVIRONMENT', '').lower() == 'production'
+    is_render = 'RENDER' in os.environ
+    force_webhook = os.environ.get('FORCE_WEBHOOK', '').lower() == 'true'
+    force_polling = os.environ.get('FORCE_POLLING', '').lower() == 'true'
+    
+    # Priorité de configuration: variables d'env explicites > environnement de production > défaut
+    if force_webhook:
+        print("Mode webhook forcé par la variable d'environnement")
+        from gunicorn.app.base import BaseApplication
+        
+        class StandaloneApplication(BaseApplication):
+            def __init__(self, app, options=None):
+                self.options = options or {}
+                self.application = app
+                super().__init__()
+                
+            def load_config(self):
+                for key, value in self.options.items():
+                    if key in self.cfg.settings and value is not None:
+                        self.cfg.set(key, value)
+                        
+            def load(self):
+                return self.application
+        
+        # Créer l'application Flask avec le webhook
+        app = main_webhook()
+        
+        # Options pour Gunicorn
+        options = {
+            'bind': f"0.0.0.0:{os.environ.get('PORT', '8000')}",
+            'workers': 1,  # Un seul worker pour éviter les conflits
+            'timeout': 120,
+            'worker_class': 'gthread',  # Thread-based worker
+            'threads': 4,  # Nombre de threads par worker
+            'accesslog': '-',  # Log vers stdout
+            'errorlog': '-',   # Log d'erreur vers stdout
+            'preload_app': True,
+            'reload': False    # Pas de rechargement en production
+        }
+        
+        # Démarrer l'application standalone avec Gunicorn
+        StandaloneApplication(app, options).run()
+        
+    elif force_polling or not (is_production or is_render):
+        print("Mode polling sélectionné (dev/local)")
+        # Utiliser le mode polling pour le développement local
+        main_polling()
+    else:
+        print("Mode webhook détecté pour l'environnement de production")
+        try:
+            # En environnement de production comme Render, laisser le serveur WSGI gérer l'application
+            app = main_webhook()
+            # L'application sera démarrée par gunicorn ou un autre serveur WSGI
+            # à travers la variable WSGI_APPLICATION dans le fichier wsgi.py
+            print("Application webhook initialisée, prête à être servie par Gunicorn")
+        except Exception as e:
+            import traceback
+            print(f"Erreur lors de l'initialisation du mode webhook: {e}")
+            print(traceback.format_exc())
+            print("Retombant sur le mode polling")
+            main_polling()

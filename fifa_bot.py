@@ -48,7 +48,7 @@ from verification import (
 from admin_access import is_admin
 
 # Initialisation du système
-from init_system import ensure_initialization
+from games import ensure_initialization
 
 # Configuration du logging
 logging.basicConfig(

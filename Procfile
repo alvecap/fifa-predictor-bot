@@ -1,1 +1,1 @@
-worker: python fifa_games.py
+worker: python reset_telegram.py && python fifa_bot.py
